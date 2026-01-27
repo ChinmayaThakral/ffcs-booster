@@ -3208,3 +3208,70 @@ async function importCsvFile() {
         if (importBtn) importBtn.disabled = false;
     }
 }
+
+// ==================== Feedback Modal ====================
+
+function checkLoginAndOpenFeedback() {
+    if (window.IS_LOGGED_IN) {
+        openFeedbackModal();
+    } else {
+        if (confirm("You need to be logged in to send feedback. proceed to login?")) {
+            window.location.href = '/auth/login';
+        }
+    }
+}
+
+function openFeedbackModal() {
+    const modal = document.getElementById('feedbackModal');
+    modal.classList.add('active');
+    document.getElementById('feedbackStatus').innerHTML = '';
+    const textarea = document.getElementById('feedbackMessage');
+    textarea.value = '';
+    updateCharCount(textarea);
+}
+
+function updateCharCount(textarea) {
+    const count = textarea.value.length;
+    document.getElementById('charCount').textContent = count;
+}
+
+function closeFeedbackModal() {
+    document.getElementById('feedbackModal').classList.remove('active');
+}
+
+async function submitFeedback() {
+    const messageInput = document.getElementById('feedbackMessage');
+    const statusDiv = document.getElementById('feedbackStatus');
+    const message = messageInput.value.trim();
+
+    if (!message) {
+        statusDiv.innerHTML = '<div class="alert alert-danger">Please enter a message.</div>';
+        return;
+    }
+
+    statusDiv.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+        const response = await fetch('/api/feedback/submit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ message: message })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            statusDiv.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+            setTimeout(() => {
+                closeFeedbackModal();
+            }, 2000);
+        } else {
+            statusDiv.innerHTML = `<div class="alert alert-danger">${data.error || 'Failed to submit feedback.'}</div>`;
+        }
+    } catch (error) {
+        console.error('Feedback error:', error);
+        statusDiv.innerHTML = '<div class="alert alert-danger">An error occurred. Please try again.</div>';
+    }
+}

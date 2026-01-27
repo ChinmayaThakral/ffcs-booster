@@ -13,7 +13,7 @@
         {% if not current_user %}
         <div class="guest-alert">
             <i class="fas fa-info-circle"></i>
-            <span>Guest Mode: Data is temporary</span>
+            <span>Guest Mode: Data is temporary Please Login</span>
         </div>
         {% endif %}
 
@@ -24,6 +24,12 @@
                 <img src="{{ current_user.profile_pic }}" alt="Avatar" class="user-avatar">
                 {% endif %}
                 <span class="user-name">{{ current_user.name }}</span>
+                {% if current_user.email == 'mehul.23bai10105@vitbhopal.ac.in' %}
+                <a href="{{ url_for('feedback.view_feedback') }}" class="btn-logout" title="Admin Feedback"
+                    style="margin-right: 5px;">
+                    <i class="fas fa-user-shield"></i>
+                </a>
+                {% endif %}
                 <a href="{{ url_for('auth.logout') }}" class="btn-logout" title="Logout">
                     <i class="fas fa-sign-out-alt"></i>
                 </a>
@@ -106,6 +112,15 @@
                     <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 4px;"></i>
                 </div>
             </div>
+        </div>
+
+        <!-- Feedback Button -->
+        <!-- Feedback Button -->
+        <div class="feedback-card" style="margin-top: 10px; text-align: center;">
+            <button onclick="checkLoginAndOpenFeedback()" class="btn btn-primary"
+                style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <i class="fas fa-comment-dots"></i> Contact Developer
+            </button>
         </div>
 
         <!-- HTML Upload moved to top card -->
@@ -196,6 +211,9 @@
         </section>
     </div>
 </main>
+
+<!-- Feedback Modal -->
+{% include "components/feedback_modal.html" %}
 
 <!-- Faculty Selection Modal -->
 {% include "components/faculty_modal.html" %}
@@ -725,5 +743,6 @@ A14+D11+D12,AB02-428,ABDUL,61"></textarea>
     // Pass data to JavaScript
     window.OCCUPIED_SLOTS = {{ occupied_slots | tojson | safe }};
     window.DAY_LETTERS = {{ day_letters | tojson | safe }};
+    window.IS_LOGGED_IN = {{ 'true' if current_user else 'false' }};
 </script>
 {% endblock %}

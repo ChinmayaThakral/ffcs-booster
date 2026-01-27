@@ -1,0 +1,29 @@
+<div id="feedbackModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2><i class="fas fa-comment-alt"></i> Contact Developer</h2>
+            <button class="modal-close" onclick="closeFeedbackModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p class="upload-hint">Have a suggestion or found a bug? Let me know directly.</p>
+
+            <div class="form-group">
+                <label for="feedbackMessage">Message</label>
+                <textarea id="feedbackMessage" class="form-control" rows="5" placeholder="Type your message here..."
+                    required maxlength="2000" oninput="updateCharCount(this)"></textarea>
+                <div style="text-align: right; font-size: 0.8em; color: #666; margin-top: 4px;">
+                    <span id="charCount">0</span>/2000 characters
+                </div>
+            </div>
+
+            <div id="feedbackStatus" class="upload-status"></div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeFeedbackModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitFeedback()">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

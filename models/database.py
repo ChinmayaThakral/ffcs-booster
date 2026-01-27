@@ -10,3 +10,4 @@ def init_app(app):
     from .slot import Slot
     from .registration import Registration
     from .user import User
+    from .feedback import Feedback

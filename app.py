@@ -1,6 +1,7 @@
 from flask import Flask
 from models import db
 from routes import main_bp, courses_bp, registration_bp, upload_bp, auth_bp, sitemap_bp, generate_bp
+from routes.feedback import feedback_bp
 from routes.auth import init_oauth
 from flask_compress import Compress
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -27,6 +28,7 @@ app.register_blueprint(courses_bp, url_prefix='/api/courses')
 app.register_blueprint(registration_bp, url_prefix='/api/registration')
 app.register_blueprint(upload_bp, url_prefix='/api/upload')
 app.register_blueprint(generate_bp, url_prefix='/api/generate')
+app.register_blueprint(feedback_bp)
 app.register_blueprint(sitemap_bp)
 
 # Create tables
@@ -55,32 +57,90 @@ from models import Course
 
 import os
 
-def _perform_cleanup_logic():
-    """Core cleanup logic to delete old GUEST data only. Logged-in user data is preserved forever."""
+def _perform_cleanup_logic(max_duration=50):
+    """Core cleanup logic to delete old GUEST data only. Stop after max_duration seconds."""
     try:
         with app.app_context():
             # Define cutoff time (7 days ago)
             cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+            start_time = time.time()
             
-            deleted_count = 0
+            total_deleted = 0
             
-            # ONLY delete old Guest courses (courses with guest_id set)
-            # Logged-in user data (where user_id is set) is preserved forever
-            old_guest_courses = Course.query.filter(
-                Course.guest_id.isnot(None), 
-                Course.created_at < cutoff
-            ).all()
-            
-            if old_guest_courses:
-                print(f"[{datetime.now()}] Cleanup: Deleting {len(old_guest_courses)} old guest courses...")
-                for course in old_guest_courses:
-                    db.session.delete(course)
-                    deleted_count += 1
-            
-            if deleted_count > 0:
-                db.session.commit()
-                print(f"[{datetime.now()}] Cleanup complete. Guest items deleted: {deleted_count}")
-                return deleted_count
+            from models import Slot, Registration
+
+            while True:
+                # Check for timeout
+                if time.time() - start_time > max_duration:
+                    print(f"[{datetime.now()}] Cleanup: Time limit reached ({max_duration}s). Stopping.")
+                    break
+
+                # 1. IDENTIFY Candidates (Bulk Fetch IDs)
+                candidates = db.session.query(Course.id).filter(
+                    Course.guest_id.isnot(None),
+                    Course.user_id.is_(None),
+                    Course.created_at < cutoff
+                ).limit(50).all() # Increased batch size because bulk delete is fast
+                
+                if not candidates:
+                    break
+                
+                course_ids = [c[0] for c in candidates]
+                print(f"[{datetime.now()}] Cleanup: Found {len(course_ids)} candidates. Performing bulk delete...")
+
+                try:
+                    # 2. BULK DELETE DEPENDENCIES (Manual Cascade)
+                    # This avoids loading objects into memory and avoids complexity of ORM cascades
+                    
+                    # A. Find relevant Slots
+                    # We need slot IDs to delete registrations efficiently
+                    slot_ids_query = db.session.query(Slot.id).filter(Slot.course_id.in_(course_ids))
+                    # Check if there are any slots to process to avoid empty IN clause errors if optimizing further, 
+                    # but .in_([]) usually works fine or we can skip.
+                    
+                    # B. Delete Registrations for those Slots
+                    delete_regs = Registration.__table__.delete().where(
+                        Registration.slot_id.in_(slot_ids_query)
+                    )
+                    res_regs = db.session.execute(delete_regs)
+                    
+                    # C. Delete Slots for those Courses
+                    delete_slots = Slot.__table__.delete().where(
+                        Slot.course_id.in_(course_ids)
+                    )
+                    res_slots = db.session.execute(delete_slots)
+                    
+                    # D. Delete Courses
+                    delete_courses = Course.__table__.delete().where(
+                        Course.id.in_(course_ids)
+                    )
+                    res_courses = db.session.execute(delete_courses)
+                    
+                    # 3. COMMIT TRANSACTION
+                    db.session.commit()
+                    
+                    count = res_courses.rowcount if res_courses.rowcount is not None else len(course_ids)
+                    total_deleted += count
+                    print(f"[{datetime.now()}] Cleanup: Bulk deleted batch of {count}. Total: {total_deleted}")
+                    
+                    # Small breather
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"Cleanup batch error: {e}. Retrying with smaller batch next time...")
+                    time.sleep(2)
+                    # Break to restart loop or retry logic could be more complex, 
+                    # but for now let's just stop this cycle to avoid infinite error loops
+                    break
+                
+                # Check timeout again
+                if time.time() - start_time > max_duration:
+                    break
+
+            if total_deleted > 0:
+                print(f"[{datetime.now()}] Cleanup complete. Total guest items deleted: {total_deleted}")
+                return total_deleted
             
             return 0
     except Exception as e:
