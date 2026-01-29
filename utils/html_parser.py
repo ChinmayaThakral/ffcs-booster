@@ -74,7 +74,7 @@ def try_parse_registration_format(soup):
                     # Parse: "MAT2001 - Differential And Difference Equations - ..."
                     parts = course_detail.split(' - ')
                     if len(parts) >= 2:
-                        course_code = parts[0].strip()
+                        course_code = parts[0].strip().upper()
                         course_name = parts[1].strip()
                         
                         ltpjc_parts = ltpjc.split()

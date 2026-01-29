@@ -99,25 +99,28 @@ def add_course_manually():
     
     try:
         # Find or create course (Scoped)
+        # Find or create course (Scoped)
         base_query = get_scoped_courses()
-        course = base_query.filter_by(code=data['course_code'].upper()).first()
+        existing_course = base_query.filter_by(code=data['course_code'].upper()).first()
         
-        if not course:
-            course = Course(
-                code=data['course_code'].upper(),
-                name=data['course_name'],
-                l=0,
-                t=0,
-                p=0,
-                j=0,
-                c=int(data.get('credits', 0)),
-                course_type='N/A',
-                category='N/A',
-                user_id=user_id,
-                guest_id=guest_id
-            )
-            db.session.add(course)
-            db.session.flush()
+        if existing_course:
+            return jsonify({'error': f"Course {existing_course.code} already exists!"}), 400
+
+        course = Course(
+            code=data['course_code'].upper(),
+            name=data['course_name'],
+            l=0,
+            t=0,
+            p=0,
+            j=0,
+            c=int(data.get('credits', 0)),
+            course_type='N/A',
+            category='N/A',
+            user_id=user_id,
+            guest_id=guest_id
+        )
+        db.session.add(course)
+        db.session.flush()
         
         # Find or create faculty (Faculty is shared? Or should be scoped?
         # Faculty names are generic. Let's keep faculty shared for now to avoid DUPLICATE faculty table boom, 

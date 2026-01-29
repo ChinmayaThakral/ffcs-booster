@@ -1018,6 +1018,15 @@ function closeManualEntryModal() {
 async function submitManualEntry(event) {
     event.preventDefault();
 
+    const form = document.getElementById('manualEntryForm');
+    const submitBtn = form.querySelector('button[type="submit"]');
+
+    // Disable button to prevent double-click
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+    }
+
     const formData = {
         course_code: document.getElementById('manualCourseCode').value.trim(),
         course_name: document.getElementById('manualCourseName').value.trim(),
@@ -1042,10 +1051,20 @@ async function submitManualEntry(event) {
             location.reload();
         } else {
             alert(`Error: ${data.error}`);
+            // Re-enable button on error
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-check"></i> Add Course';
+            }
         }
     } catch (error) {
         console.error('Error:', error);
         alert('Error adding course. Please try again.');
+        // Re-enable button on error
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-check"></i> Add Course';
+        }
     }
 }
 

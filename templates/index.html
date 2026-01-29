@@ -24,12 +24,13 @@
                 <img src="{{ current_user.profile_pic }}" alt="Avatar" class="user-avatar">
                 {% endif %}
                 <span class="user-name">{{ current_user.name }}</span>
-                {% if current_user.email == 'mehul.23bai10105@vitbhopal.ac.in' %}
-                <a href="{{ url_for('feedback.view_feedback') }}" class="btn-logout" title="Admin Feedback"
+                {% if current_user.email in ['mehul.23bai10105@vitbhopal.ac.in', 'mehul@google.com'] %}
+                <a href="{{ url_for('admin.list_users') }}" class="btn-logout" title="Admin Dashboard"
                     style="margin-right: 5px;">
-                    <i class="fas fa-user-shield"></i>
+                    <i class="fas fa-users-cog"></i>
                 </a>
                 {% endif %}
+
                 <a href="{{ url_for('auth.logout') }}" class="btn-logout" title="Logout">
                     <i class="fas fa-sign-out-alt"></i>
                 </a>

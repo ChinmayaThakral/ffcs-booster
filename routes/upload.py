@@ -145,7 +145,9 @@ def _process_single_file_import(file, user_id, guest_id):
         print(f"DEBUG: Parsed slots count: {len(parsed['slots'])}")
         
         # Check if course already exists FOR THIS USER
-        query = Course.query.filter_by(code=course_data['code'])
+        # Use upper case to ensure consistency
+        code_upper = course_data['code'].upper()
+        query = Course.query.filter_by(code=code_upper)
         if user_id:
             query = query.filter_by(user_id=user_id)
         else:
@@ -156,7 +158,7 @@ def _process_single_file_import(file, user_id, guest_id):
         # Start Transaction for this file
         if not course:
             course = Course(
-                code=course_data['code'],
+                code=code_upper,
                 name=course_data['name'],
                 l=course_data['l'],
                 t=course_data['t'],

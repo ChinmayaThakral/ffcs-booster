@@ -38,3 +38,8 @@ SQLALCHEMY_ENGINE_OPTIONS = {
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'placeholder-client-id')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', 'placeholder-client-secret')
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+ADMIN_EMAILS = [
+    'mehul.23bai10105@vitbhopal.ac.in',
+     # Added for testing if needed, or remove
+]
+

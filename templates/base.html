@@ -68,7 +68,24 @@
 
 <body>
     {% block body %}
+    <!-- Impersonation Banner -->
+    {% if session.get('is_impersonating') %}
+    <div
+        style="background: #ff4757; color: white; padding: 10px; text-align: center; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+        <strong><i class="fas fa-user-secret"></i> IMPERSONATION MODE ACTIVE</strong>
+        <span style="margin: 0 15px;">You are viewing as another user.</span>
+        <form action="{{ url_for('admin.stop_impersonation') }}" method="POST" style="display: inline;">
+            <button type="submit"
+                style="background: white; color: #ff4757; border: none; padding: 4px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                STOP IMPERSONATING
+            </button>
+        </form>
+    </div>
+    <div style="height: 50px;"></div> <!-- Spacer -->
+    {% endif %}
+
     <div class="app-wrapper">
+
         {% block content %}{% endblock %}
 
         <!-- Footer -->
