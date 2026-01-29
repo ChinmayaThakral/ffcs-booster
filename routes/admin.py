@@ -31,17 +31,31 @@ def list_users():
     # 1. Registered Users
     users = User.query.all()
     
+    # Bulk Count Courses
+    course_counts = db.session.query(
+        Course.user_id, db.func.count(Course.id)
+    ).filter(Course.user_id.isnot(None)).group_by(Course.user_id).all()
+    course_map = {uid: count for uid, count in course_counts}
+
+    # Bulk Count Registrations
+    reg_counts = db.session.query(
+        Registration.user_id, db.func.count(Registration.id)
+    ).filter(Registration.user_id.isnot(None)).group_by(Registration.user_id).all()
+    reg_map = {uid: count for uid, count in reg_counts}
+
+    # Bulk Count Saved Timetables
+    saved_counts = db.session.query(
+        SavedTimetable.user_id, db.func.count(SavedTimetable.id)
+    ).filter(SavedTimetable.user_id.isnot(None)).group_by(SavedTimetable.user_id).all()
+    saved_map = {uid: count for uid, count in saved_counts}
+
     user_stats = []
     for u in users:
-        course_count = u.courses.count() if hasattr(u, 'courses') else Course.query.filter_by(user_id=u.id).count()
-        reg_count = u.registrations.count() if hasattr(u, 'registrations') else Registration.query.filter_by(user_id=u.id).count()
-        saved_count = SavedTimetable.query.filter_by(user_id=u.id).count()
-        
         user_stats.append({
             'user': u,
-            'course_count': course_count,
-            'registration_count': reg_count,
-            'saved_count': saved_count
+            'course_count': course_map.get(u.id, 0),
+            'registration_count': reg_map.get(u.id, 0),
+            'saved_count': saved_map.get(u.id, 0)
         })
         
     # 2. Guest Sessions
