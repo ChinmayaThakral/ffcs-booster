@@ -98,14 +98,16 @@ def add_course_manually():
         return jsonify({'error': 'No active session'}), 401
     
     try:
-        # Find or create course (Scoped)
-        # Find or create course (Scoped)
+        # Check if course with same code already exists (Scoped)
         base_query = get_scoped_courses()
         existing_course = base_query.filter_by(code=data['course_code'].upper()).first()
         
+        # If course exists, delete it first (along with its slots and registrations via cascade)
         if existing_course:
-            return jsonify({'error': f"Course {existing_course.code} already exists!"}), 400
-
+            db.session.delete(existing_course)
+            db.session.flush()
+        
+        # Create new course
         course = Course(
             code=data['course_code'].upper(),
             name=data['course_name'],

@@ -245,6 +245,62 @@
     </div>
 </div>
 
+<!-- Modify Course Modal (Separate from AI Import) -->
+<div id="modifyCourseModal" class="modal">
+    <div class="modal-content modal-xl">
+        <div class="modal-header">
+            <h2><i class="fas fa-edit"></i> Modify Course Details</h2>
+            <button class="modal-close" onclick="closeModifyCourseModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modify-course-info" style="margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 8px;">
+                <h3 id="modifyCourseTitle" style="margin: 0;"></h3>
+                <p id="modifyCourseSubtitle" style="color: var(--text-muted); font-size: 0.9rem; margin: 4px 0 0 0;"></p>
+            </div>
+
+            <p class="upload-hint">Edit faculty and slot information below. You can add, edit, or delete rows.</p>
+
+            <div class="ocr-review-actions">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="modifyAddRow()">
+                    <i class="fas fa-plus"></i> Add Row
+                </button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="modifyDeleteSelectedRows()">
+                    <i class="fas fa-trash"></i> Delete Selected
+                </button>
+            </div>
+
+            <div class="ocr-table-container">
+                <table class="ocr-review-table" id="modifyReviewTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;"><input type="checkbox" id="modifySelectAll" onclick="modifyToggleSelectAll()"></th>
+                            <th>Slot Code</th>
+                            <th>Venue</th>
+                            <th>Faculty Name</th>
+                            <th>Available Seats</th>
+                            <th style="width: 50px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modifyReviewBody">
+                        <!-- Rows will be added dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="modifyReviewStatus" class="upload-status"></div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="backToModifyList()">
+                    <i class="fas fa-arrow-left"></i> Back to List
+                </button>
+                <button type="button" id="modifySaveBtn" class="btn btn-success" onclick="saveModifiedCourse()">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Saved Timetables Modal -->
 <div id="savedTimetablesModal" class="modal">
     <div class="modal-content modal-lg">
@@ -376,7 +432,7 @@
                 <ol>
                     <li>Go to VTOP Mock FFCS page </li>
                     <li>Select course type -> Select course ->Open faculty list</li>
-                    <li>Press: <strong>Ctrl + S</strong></li>
+                    <li>Right Click then Select: <strong>Save As</strong></li>
                     <li>Save the file as <strong>Webpage, HTML Only</strong></li>
                     <li>Click below to upload the saved .html file</li>
                 </ol>
@@ -652,7 +708,136 @@ A14+D11+D12,AB02-428,ABDUL,61"></textarea>
             </div>
         </div>
     </div>
-    <!-- Video Modal -->
+</div>
+
+<!-- Manual Import Modal (Multi-step wizard for Import section) -->
+<div id="manualImportModal" class="modal">
+    <div class="modal-content modal-xl">
+        <div class="modal-header">
+            <h2><i class="fas fa-keyboard"></i> Manual Course Import</h2>
+            <button class="modal-close" onclick="closeManualImportModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <!-- Step Indicator -->
+            <div class="ocr-steps">
+                <div class="ocr-step active" data-step="1">
+                    <span class="step-num">1</span>
+                    <span class="step-label">Course Details</span>
+                </div>
+                <div class="ocr-step" data-step="2">
+                    <span class="step-num">2</span>
+                    <span class="step-label">Enter Faculty Data</span>
+                </div>
+            </div>
+
+            <!-- Step 1: Course Details -->
+            <div id="manualImportStep1" class="ocr-step-content active">
+                <h3>Enter Course Details</h3>
+                <div class="ocr-form-grid">
+                    <div class="form-group">
+                        <label>Course Code *</label>
+                        <input type="text" id="manualImportCourseCode" required placeholder="e.g., CSA4029" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Course Name *</label>
+                        <input type="text" id="manualImportCourseName" required placeholder="e.g., REINFORCEMENT LEARNING" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Course Type</label>
+                        <select id="manualImportCourseType" class="form-control">
+                            <option value="LTP">LTP (Theory + Lab)</option>
+                            <option value="Theory">Theory Only</option>
+                            <option value="Lab">Lab Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="manualImportCategory" class="form-control">
+                            <option value="PC">PC (Program Core)</option>
+                            <option value="PE">PE (Program Elective)</option>
+                            <option value="UC">UC (University Core)</option>
+                            <option value="UE">UE (University Elective)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="ocr-form-grid credits-grid">
+                    <div class="form-group">
+                        <label>L (Lecture)</label>
+                        <input type="number" id="manualImportL" value="2" min="0" max="10" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>T (Tutorial)</label>
+                        <input type="number" id="manualImportT" value="1" min="0" max="10" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>P (Practical)</label>
+                        <input type="number" id="manualImportP" value="1" min="0" max="10" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>J (Project)</label>
+                        <input type="number" id="manualImportJ" value="0" min="0" max="10" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>C (Credits)</label>
+                        <input type="number" id="manualImportC" value="4" min="0" max="20" class="form-control">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeManualImportModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="manualImportNextStep()">
+                        Next: Enter Data <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Enter Faculty Data -->
+            <div id="manualImportStep2" class="ocr-step-content">
+                <h3>Enter Faculty & Slot Data</h3>
+                <p class="upload-hint">Add faculty and slot information. You can add multiple rows.</p>
+
+                <div class="ocr-review-actions">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="manualImportAddRow()">
+                        <i class="fas fa-plus"></i> Add Row
+                    </button>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="manualImportDeleteSelectedRows()">
+                        <i class="fas fa-trash"></i> Delete Selected
+                    </button>
+                </div>
+
+                <div class="ocr-table-container">
+                    <table class="ocr-review-table" id="manualImportReviewTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="manualImportSelectAll" onclick="manualImportToggleSelectAll()"></th>
+                                <th>Slot Code</th>
+                                <th>Venue</th>
+                                <th>Faculty Name</th>
+                                <th>Available Seats</th>
+                                <th style="width: 50px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manualImportReviewBody">
+                            <!-- Rows will be added dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="manualImportReviewStatus" class="upload-status"></div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="manualImportPrevStep()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button type="button" id="manualImportSubmitBtn" class="btn btn-success" onclick="submitManualImportData()">
+                        <i class="fas fa-check"></i> Import Course
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Video Modal -->
     <div id="videoModal" class="modal">
         <div class="modal-content" style="max-width: 800px; width: 90%;">
             <div class="modal-header">

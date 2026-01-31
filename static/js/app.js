@@ -2450,37 +2450,239 @@ async function importCsvFile() {
 let ocrCurrentStep = 1;
 let ocrImages = [];
 let ocrExtractedData = [];
-let ocrImportMode = 'ai'; // 'ai', 'manual', 'edit'
 let currentEditingCourseId = null;
+let modifyExtractedData = []; // For the separate modify modal
+
+// Manual Import Modal state (completely separate from simple manual entry)
+let manualImportCurrentStep = 1;
+let manualImportExtractedData = [];
 
 
 function openOcrImportModal() {
-    ocrImportMode = 'ai';
-    document.querySelector('#ocrImportModal h2').innerHTML = '<i class="fas fa-robot"></i> AI-Assisted Course Import';
-
-    // Update UI for AI mode
-    document.getElementById('ocrStep2Label').textContent = 'AI Extract';
-    document.getElementById('ocrStep1NextBtn').innerHTML = 'Next: Upload Images <i class="fas fa-arrow-right"></i>';
-
     document.getElementById('ocrImportModal').classList.add('active');
     resetOcrModal();
 }
 
 function openManualImportModal() {
-    ocrImportMode = 'manual';
-    document.querySelector('#ocrImportModal h2').innerHTML = '<i class="fas fa-keyboard"></i> Manual Course Entry';
-
-    // Update UI for Manual mode
-    document.getElementById('ocrStep2Label').textContent = 'Manual Entry';
-    document.getElementById('ocrStep1NextBtn').innerHTML = 'Next: Enter Data <i class="fas fa-arrow-right"></i>';
-
-    document.getElementById('ocrImportModal').classList.add('active');
-    resetOcrModal();
+    document.getElementById('manualImportModal').classList.add('active');
+    resetManualImportModal();
 }
 
 function closeOcrImportModal() {
     document.getElementById('ocrImportModal').classList.remove('active');
     resetOcrModal();
+}
+
+function closeManualImportModal() {
+    document.getElementById('manualImportModal').classList.remove('active');
+    resetManualImportModal();
+}
+
+function resetManualImportModal() {
+    manualImportCurrentStep = 1;
+    manualImportExtractedData = [];
+
+    // Reset form - use specific IDs for the import modal
+    document.getElementById('manualImportCourseCode').value = '';
+    document.getElementById('manualImportCourseName').value = '';
+    document.getElementById('manualImportCourseType').value = 'LTP';
+    document.getElementById('manualImportCategory').value = 'PC';
+    document.getElementById('manualImportL').value = '2';
+    document.getElementById('manualImportT').value = '1';
+    document.getElementById('manualImportP').value = '1';
+    document.getElementById('manualImportJ').value = '0';
+    document.getElementById('manualImportC').value = '4';
+
+    // Reset review table
+    document.getElementById('manualImportReviewBody').innerHTML = '';
+    document.getElementById('manualImportReviewStatus').innerHTML = '';
+
+    // Update step UI
+    updateManualImportStepUI();
+}
+
+function updateManualImportStepUI() {
+    // Update step indicators
+    document.querySelectorAll('#manualImportModal .ocr-steps .ocr-step').forEach(step => {
+        const stepNum = parseInt(step.dataset.step);
+        step.classList.remove('active', 'completed');
+        if (stepNum < manualImportCurrentStep) step.classList.add('completed');
+        if (stepNum === manualImportCurrentStep) step.classList.add('active');
+    });
+
+    // Show/hide step content
+    document.getElementById('manualImportStep1').classList.toggle('active', manualImportCurrentStep === 1);
+    document.getElementById('manualImportStep2').classList.toggle('active', manualImportCurrentStep === 2);
+}
+
+function manualImportNextStep() {
+    if (manualImportCurrentStep === 1) {
+        const code = document.getElementById('manualImportCourseCode').value.trim();
+        const name = document.getElementById('manualImportCourseName').value.trim();
+        if (!code || !name) {
+            alert('Please enter Course Code and Course Name.');
+            return;
+        }
+
+        manualImportCurrentStep = 2;
+        updateManualImportStepUI();
+
+        // Initialize with an empty row if empty
+        const reviewBody = document.getElementById('manualImportReviewBody');
+        if (reviewBody.children.length === 0) {
+            manualImportAddRow();
+        }
+    }
+}
+
+function manualImportPrevStep() {
+    if (manualImportCurrentStep === 2) {
+        manualImportCurrentStep = 1;
+        updateManualImportStepUI();
+    }
+}
+
+function manualImportAddRow() {
+    const tbody = document.getElementById('manualImportReviewBody');
+    const newIndex = tbody.querySelectorAll('tr').length;
+
+    const row = document.createElement('tr');
+    row.dataset.index = newIndex;
+    row.innerHTML = `
+        <td><input type="checkbox" class="manual-import-row-select"></td>
+        <td><input type="text" value="" class="manual-import-slot form-control" placeholder="e.g., A11+A12+A13"></td>
+        <td><input type="text" value="TBA" class="manual-import-venue form-control"></td>
+        <td><input type="text" value="" class="manual-import-faculty form-control" placeholder="Faculty Name"></td>
+        <td><input type="number" value="70" class="manual-import-seats form-control" min="0"></td>
+        <td><button class="btn btn-sm btn-danger" onclick="manualImportDeleteRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(row);
+    
+    // Focus the first input
+    row.querySelector('.manual-import-slot').focus();
+}
+
+function manualImportDeleteRow(btn) {
+    btn.closest('tr').remove();
+}
+
+function manualImportToggleSelectAll() {
+    const selectAll = document.getElementById('manualImportSelectAll').checked;
+    document.querySelectorAll('.manual-import-row-select').forEach(cb => cb.checked = selectAll);
+}
+
+function manualImportDeleteSelectedRows() {
+    const checkboxes = document.querySelectorAll('.manual-import-row-select:checked');
+    if (checkboxes.length === 0) {
+        alert('Please select rows to delete.');
+        return;
+    }
+    checkboxes.forEach(cb => cb.closest('tr').remove());
+    document.getElementById('manualImportSelectAll').checked = false;
+}
+
+async function submitManualImportData() {
+    const statusDiv = document.getElementById('manualImportReviewStatus');
+    const importBtn = document.getElementById('manualImportSubmitBtn');
+
+    // Collect course data
+    const courseData = {
+        course_code: document.getElementById('manualImportCourseCode').value.trim(),
+        course_name: document.getElementById('manualImportCourseName').value.trim(),
+        l: parseInt(document.getElementById('manualImportL').value) || 0,
+        t: parseInt(document.getElementById('manualImportT').value) || 0,
+        p: parseInt(document.getElementById('manualImportP').value) || 0,
+        j: parseInt(document.getElementById('manualImportJ').value) || 0,
+        c: parseInt(document.getElementById('manualImportC').value) || 0,
+        course_type: document.getElementById('manualImportCourseType').value,
+        category: document.getElementById('manualImportCategory').value
+    };
+
+    // Collect slot data from table
+    const rows = document.querySelectorAll('#manualImportReviewBody tr');
+    const slots = [];
+
+    rows.forEach(row => {
+        const slot = row.querySelector('.manual-import-slot')?.value.trim();
+        const venue = row.querySelector('.manual-import-venue')?.value.trim() || 'TBA';
+        const faculty = row.querySelector('.manual-import-faculty')?.value.trim();
+        const seats = parseInt(row.querySelector('.manual-import-seats')?.value) || 70;
+
+        if (slot && faculty) {
+            slots.push({
+                slot_code: slot,
+                venue: venue,
+                faculty: faculty,
+                available_seats: seats
+            });
+        }
+    });
+
+    if (slots.length === 0) {
+        alert('Please add at least one valid slot entry.');
+        return;
+    }
+
+    importBtn.disabled = true;
+    statusDiv.innerHTML = '<div class="loading-spinner"></div> Importing course data...';
+
+    // Build CSV content
+    const csvLines = [
+        'course_code,course_name,l,t,p,j,c,course_type,category',
+        `${courseData.course_code},${courseData.course_name},${courseData.l},${courseData.t},${courseData.p},${courseData.j},${courseData.c},${courseData.course_type},${courseData.category}`,
+        'slot_code,faculty,venue,available_seats'
+    ];
+
+    slots.forEach(s => {
+        csvLines.push(`${s.slot_code},${s.faculty},${s.venue},${s.available_seats}`);
+    });
+
+    const csvContent = csvLines.join('\n');
+
+    // Create a blob and send as file
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const formData = new FormData();
+    formData.append('files[]', blob, `${courseData.course_code}.csv`);
+
+    try {
+        const response = await fetch('/api/upload/import', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            const result = data.results[0];
+
+            if (result.status === 'success') {
+                statusDiv.innerHTML = `
+                    <div class="import-success">
+                        <i class="fas fa-check-circle"></i>
+                        <div>
+                            <strong>Course imported successfully!</strong><br>
+                            ${result.course_code} - ${result.slots_added} faculty/slot options added
+                        </div>
+                    </div>
+                `;
+
+                setTimeout(() => {
+                    closeManualImportModal();
+                    location.reload();
+                }, 1500);
+            } else {
+                statusDiv.innerHTML = `<div class="import-error-item"><i class="fas fa-times"></i> ${result.message}</div>`;
+                importBtn.disabled = false;
+            }
+        } else {
+            statusDiv.innerHTML = `<div class="import-error-item"><i class="fas fa-times"></i> ${data.error || 'Import failed'}</div>`;
+            importBtn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Import error:', error);
+        statusDiv.innerHTML = '<div class="import-error-item"><i class="fas fa-times"></i> Error importing data.</div>';
+        importBtn.disabled = false;
+    }
 }
 
 function openModifyCoursesModal() {
@@ -2544,54 +2746,170 @@ async function loadCourseForEdit(id, code, name, l, t, p, j, c, type, cat) {
     // Close selection modal
     document.getElementById('allCoursesModal').classList.remove('active');
 
-    // Set Edit Mode
-    ocrImportMode = 'edit';
+    // Set current editing course
     currentEditingCourseId = id;
 
-    // Pre-fill Step 1 Form (disabled or readonly? User might want to edit meta too? For now, allowing edit)
-    document.getElementById('ocrCourseCode').value = code;
-    document.getElementById('ocrCourseName').value = name;
-    document.getElementById('ocrL').value = l;
-    document.getElementById('ocrT').value = t;
-    document.getElementById('ocrP').value = p;
-    document.getElementById('ocrJ').value = j;
-    document.getElementById('ocrC').value = c;
-    document.getElementById('ocrCourseType').value = type;
-    document.getElementById('ocrCategory').value = cat;
+    // Update modal header info
+    document.getElementById('modifyCourseTitle').textContent = `${code} - ${name}`;
+    document.getElementById('modifyCourseSubtitle').textContent = `L:${l} T:${t} P:${p} J:${j} C:${c} | ${type} | ${cat}`;
 
     // Fetch Slots
     try {
         const response = await fetch(`/api/courses/${id}/slots`);
         const data = await response.json();
 
-        // Populate ocrExtractedData
-        ocrExtractedData = data.slots.map(s => ({
+        // Populate modifyExtractedData
+        modifyExtractedData = data.slots.map(s => ({
             slot_code: s.slot_code,
             venue: s.venue,
             faculty: s.faculty_name || 'N/A',
             available_seats: s.available_seats
         }));
 
-        // Open Editor (Step 3)
-        document.getElementById('ocrImportModal').classList.add('active');
-        ocrCurrentStep = 3;
-        updateOcrStepUI();
-
-        // Update UI Text
-        document.querySelector('#ocrImportModal h2').innerHTML = '<i class="fas fa-edit"></i> Modify Course Details';
-        document.getElementById('ocrStep2Label').textContent = 'Data Loaded'; // Contextual label
-
-        const impBtn = document.getElementById('ocrImportBtn');
-        impBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes';
-        // Logic inside importOcrData handles the mode check
-        // Actually, better to rely on inside check or simple override
-        // logic below handles it
-
-        populateOcrReviewTable();
+        // Open the separate modify modal
+        document.getElementById('modifyCourseModal').classList.add('active');
+        
+        // Populate the table
+        populateModifyReviewTable();
 
     } catch (e) {
         alert('Error loading course details');
         console.error(e);
+    }
+}
+
+function closeModifyCourseModal() {
+    document.getElementById('modifyCourseModal').classList.remove('active');
+    currentEditingCourseId = null;
+    modifyExtractedData = [];
+    document.getElementById('modifyReviewBody').innerHTML = '';
+    document.getElementById('modifyReviewStatus').innerHTML = '';
+}
+
+function backToModifyList() {
+    closeModifyCourseModal();
+    openModifyCoursesModal();
+}
+
+function populateModifyReviewTable() {
+    const tbody = document.getElementById('modifyReviewBody');
+    tbody.innerHTML = '';
+
+    if (modifyExtractedData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No slots found. Click "Add Row" to add slots.</td></tr>';
+        return;
+    }
+
+    modifyExtractedData.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="checkbox" class="modify-row-select" data-index="${index}"></td>
+            <td><input type="text" class="form-control modify-slot" value="${row.slot_code || ''}" placeholder="e.g., A11+A12"></td>
+            <td><input type="text" class="form-control modify-venue" value="${row.venue || ''}" placeholder="e.g., AB02-423"></td>
+            <td><input type="text" class="form-control modify-faculty" value="${row.faculty || ''}" placeholder="Faculty Name"></td>
+            <td><input type="number" class="form-control modify-seats" value="${row.available_seats || 70}" min="0"></td>
+            <td><button type="button" class="btn btn-sm btn-danger" onclick="modifyDeleteRow(this)"><i class="fas fa-trash"></i></button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function modifyAddRow() {
+    const tbody = document.getElementById('modifyReviewBody');
+    
+    // Remove "no slots" message if present
+    if (tbody.querySelector('td[colspan]')) {
+        tbody.innerHTML = '';
+    }
+
+    const tr = document.createElement('tr');
+    const index = tbody.children.length;
+    tr.innerHTML = `
+        <td><input type="checkbox" class="modify-row-select" data-index="${index}"></td>
+        <td><input type="text" class="form-control modify-slot" value="" placeholder="e.g., A11+A12"></td>
+        <td><input type="text" class="form-control modify-venue" value="" placeholder="e.g., AB02-423"></td>
+        <td><input type="text" class="form-control modify-faculty" value="" placeholder="Faculty Name"></td>
+        <td><input type="number" class="form-control modify-seats" value="70" min="0"></td>
+        <td><button type="button" class="btn btn-sm btn-danger" onclick="modifyDeleteRow(this)"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+    
+    // Focus the first input
+    tr.querySelector('.modify-slot').focus();
+}
+
+function modifyDeleteRow(btn) {
+    btn.closest('tr').remove();
+}
+
+function modifyToggleSelectAll() {
+    const selectAll = document.getElementById('modifySelectAll').checked;
+    document.querySelectorAll('.modify-row-select').forEach(cb => cb.checked = selectAll);
+}
+
+function modifyDeleteSelectedRows() {
+    const checkboxes = document.querySelectorAll('.modify-row-select:checked');
+    if (checkboxes.length === 0) {
+        alert('Please select rows to delete.');
+        return;
+    }
+    checkboxes.forEach(cb => cb.closest('tr').remove());
+    document.getElementById('modifySelectAll').checked = false;
+}
+
+async function saveModifiedCourse() {
+    const statusDiv = document.getElementById('modifyReviewStatus');
+    const saveBtn = document.getElementById('modifySaveBtn');
+
+    // Collect slot data
+    const rows = document.querySelectorAll('#modifyReviewBody tr');
+    const slots = [];
+
+    rows.forEach(row => {
+        const slot = row.querySelector('.modify-slot')?.value.trim();
+        const venue = row.querySelector('.modify-venue')?.value.trim() || 'TBA';
+        const faculty = row.querySelector('.modify-faculty')?.value.trim();
+        const seats = parseInt(row.querySelector('.modify-seats')?.value) || 70;
+
+        if (slot && faculty) {
+            slots.push({
+                slot_code: slot,
+                venue: venue,
+                faculty: faculty,
+                available_seats: seats
+            });
+        }
+    });
+
+    if (slots.length === 0 && !confirm('No slots defined. This will clear all slots for the course. Continue?')) {
+        return;
+    }
+
+    saveBtn.disabled = true;
+    statusDiv.innerHTML = '<div class="loading-spinner"></div> Saving changes...';
+
+    try {
+        const response = await fetch(`/api/courses/${currentEditingCourseId}/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slots: slots })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            statusDiv.innerHTML = `<div class="import-success"><i class="fas fa-check"></i> ${data.message}</div>`;
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            statusDiv.innerHTML = `<div class="import-error-item">Error: ${data.error}</div>`;
+            saveBtn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+        statusDiv.innerHTML = '<div class="import-error-item"><i class="fas fa-times"></i> Error saving changes.</div>';
+        saveBtn.disabled = false;
     }
 }
 
@@ -2616,6 +2934,10 @@ function resetOcrModal() {
     document.getElementById('ocrProcessBtn').disabled = true;
     document.getElementById('ocrProgress').style.display = 'none';
 
+    // Reset AI output textarea and status
+    document.getElementById('aiOutputText').value = '';
+    document.getElementById('aiParseStatus').innerHTML = '';
+
     // Reset review table
     document.getElementById('ocrReviewBody').innerHTML = '';
     document.getElementById('ocrReviewStatus').innerHTML = '';
@@ -2624,16 +2946,16 @@ function resetOcrModal() {
 }
 
 function updateOcrStepUI() {
-    // Update step indicators
-    document.querySelectorAll('.ocr-steps .ocr-step').forEach(step => {
+    // Update step indicators (only in the AI import modal)
+    document.querySelectorAll('#ocrImportModal .ocr-steps .ocr-step').forEach(step => {
         const stepNum = parseInt(step.dataset.step);
         step.classList.remove('active', 'completed');
         if (stepNum < ocrCurrentStep) step.classList.add('completed');
         if (stepNum === ocrCurrentStep) step.classList.add('active');
     });
 
-    // Show/hide step content
-    document.querySelectorAll('.ocr-step-content').forEach((content, i) => {
+    // Show/hide step content (only in the AI import modal)
+    document.querySelectorAll('#ocrImportModal .ocr-step-content').forEach((content, i) => {
         content.classList.toggle('active', i + 1 === ocrCurrentStep);
     });
 }
@@ -2647,20 +2969,6 @@ function ocrNextStep(step) {
             alert('Please enter Course Code and Course Name.');
             return;
         }
-
-        // If manual mode, skip step 2 and go straight to 3
-        if (ocrImportMode === 'manual') {
-            ocrCurrentStep = 3;
-            updateOcrStepUI();
-
-            // Initialize with an empty row if empty
-            const reviewBody = document.getElementById('ocrReviewBody');
-            if (reviewBody.children.length === 0 || reviewBody.innerText.includes('No data')) {
-                reviewBody.innerHTML = '';
-                ocrAddRow(); // Add first empty row
-            }
-            return;
-        }
     }
 
     ocrCurrentStep = step;
@@ -2668,13 +2976,6 @@ function ocrNextStep(step) {
 }
 
 function ocrPrevStep(step) {
-    // If manual mode and coming back from step 3, go to step 1
-    if (ocrImportMode === 'manual' && ocrCurrentStep === 3) {
-        ocrCurrentStep = 1;
-        updateOcrStepUI();
-        return;
-    }
-
     ocrCurrentStep = step;
     updateOcrStepUI();
 }
@@ -2848,11 +3149,6 @@ function ocrDeleteSelectedRows() {
 }
 
 async function importOcrData() {
-    if (ocrImportMode === 'edit') {
-        saveCourseEdits();
-        return;
-    }
-
     const statusDiv = document.getElementById('ocrReviewStatus');
     const importBtn = document.getElementById('ocrImportBtn');
 
@@ -2957,62 +3253,6 @@ async function importOcrData() {
     } catch (error) {
         console.error('Import error:', error);
         statusDiv.innerHTML = '<div class="import-error-item"><i class="fas fa-times"></i> Error importing data.</div>';
-        importBtn.disabled = false;
-    }
-}
-
-async function saveCourseEdits() {
-    const statusDiv = document.getElementById('ocrReviewStatus');
-    const importBtn = document.getElementById('ocrImportBtn');
-
-    // Collect slot data
-    const rows = document.querySelectorAll('#ocrReviewBody tr');
-    const slots = [];
-
-    rows.forEach(row => {
-        const slot = row.querySelector('.ocr-slot')?.value.trim();
-        const venue = row.querySelector('.ocr-venue')?.value.trim() || 'TBA';
-        const faculty = row.querySelector('.ocr-faculty')?.value.trim();
-        const seats = parseInt(row.querySelector('.ocr-seats')?.value) || 70;
-
-        if (slot && faculty) {
-            slots.push({
-                slot_code: slot,
-                venue: venue,
-                faculty: faculty,
-                available_seats: seats
-            });
-        }
-    });
-
-    if (slots.length === 0 && !confirm('No slots defined. This will clear all slots for the course. Continue?')) {
-        return;
-    }
-
-    importBtn.disabled = true;
-    statusDiv.innerHTML = '<div class="loading-spinner"></div> Saving changes...';
-
-    try {
-        const response = await fetch(`/api/courses/${currentEditingCourseId}/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slots: slots })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            statusDiv.innerHTML = `<div class="import-success"><i class="fas fa-check"></i> ${data.message}</div>`;
-            setTimeout(() => {
-                location.reload();
-            }, 1000);
-        } else {
-            statusDiv.innerHTML = `<div class="import-error-item">Error: ${data.error}</div>`;
-            importBtn.disabled = false;
-        }
-    } catch (e) {
-        console.error(e);
-        statusDiv.innerHTML = `<div class="import-error-item">Error saving changes.</div>`;
         importBtn.disabled = false;
     }
 }
