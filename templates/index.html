@@ -124,6 +124,23 @@
             </button>
         </div>
 
+        <!-- Star Rating Widget -->
+        <div class="rate-app-card" id="rateAppCard" style="margin-top: 10px; text-align: center;">
+            <div class="rate-app-inner">
+                <p class="rate-label">Rate this App</p>
+                <div class="star-rating" id="starRating">
+                    <span class="star" data-value="1" title="1 star"><i class="fas fa-star"></i></span>
+                    <span class="star" data-value="2" title="2 stars"><i class="fas fa-star"></i></span>
+                    <span class="star" data-value="3" title="3 stars"><i class="fas fa-star"></i></span>
+                    <span class="star" data-value="4" title="4 stars"><i class="fas fa-star"></i></span>
+                    <span class="star" data-value="5" title="5 stars"><i class="fas fa-star"></i></span>
+                </div>
+                <p class="rate-thanks" id="rateThanks" style="display: none;">
+                    <i class="fas fa-check-circle"></i> <span id="rateThanksText">Thanks for your rating!</span>
+                </p>
+            </div>
+        </div>
+
         <!-- HTML Upload moved to top card -->
 
         <!-- Manual Entry moved to top card -->
@@ -215,6 +232,44 @@
 
 <!-- Feedback Modal -->
 {% include "components/feedback_modal.html" %}
+
+<!-- Share App Modal (triggered after 3+ star rating) -->
+<div id="shareAppModal" class="modal">
+    <div class="modal-content" style="max-width: 440px;">
+        <div class="modal-header">
+            <h2><i class="fas fa-heart" style="color: #e74c3c;"></i> Glad you like it!</h2>
+            <button class="modal-close" onclick="closeShareModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="text-align: center;">
+            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 20px;">
+                Help your friends build better timetables please share this app with them!
+                <br>I can maintain the app for long only if more people use it.
+            </p>
+            <div class="share-buttons-grid">
+                <button class="share-btn share-whatsapp" onclick="shareVia('whatsapp')">
+                    <i class="fab fa-whatsapp"></i> WhatsApp
+                </button>
+                <button class="share-btn share-reddit" onclick="shareVia('reddit')">
+                    <i class="fab fa-reddit-alien"></i> Reddit
+                </button>
+                <button class="share-btn share-telegram" onclick="shareVia('telegram')">
+                    <i class="fab fa-telegram-plane"></i> Telegram
+                </button>
+                <button class="share-btn share-copy" onclick="shareVia('copy')">
+                    <i class="fas fa-link"></i> Copy Link
+                </button>
+            </div>
+            <div id="shareCopiedMsg" style="display:none; margin-top: 10px; color: var(--success-color); font-size: 0.85rem;">
+                <i class="fas fa-check-circle"></i> Link copied to clipboard!
+            </div>
+            <div style="margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="closeShareModal()" style="width: 100%;">
+                    Maybe Later
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Faculty Selection Modal -->
 {% include "components/faculty_modal.html" %}

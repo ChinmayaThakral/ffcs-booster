@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for, flash, abort
 from datetime import datetime
-from models import db, Feedback, User
+from models import db, Feedback, User, Rating
 
 feedback_bp = Blueprint('feedback', __name__)
 
@@ -57,8 +57,24 @@ def view_feedback():
         abort(403) # Forbidden
 
     all_feedback = Feedback.query.order_by(Feedback.created_at.desc()).all()
-    
-    return render_template('admin_feedback.html', feedbacks=all_feedback)
+
+    # Aggregate rating data
+    all_ratings = Rating.query.all()
+    total_ratings = len(all_ratings)
+    if total_ratings > 0:
+        avg_rating = round(sum(r.stars for r in all_ratings) / total_ratings, 1)
+        distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        for r in all_ratings:
+            distribution[r.stars] += 1
+    else:
+        avg_rating = 0
+        distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+
+    return render_template('admin_feedback.html',
+                           feedbacks=all_feedback,
+                           avg_rating=avg_rating,
+                           total_ratings=total_ratings,
+                           distribution=distribution)
 
 @feedback_bp.route('/admin/feedback/delete/<int:feedback_id>', methods=['POST'])
 def delete_feedback(feedback_id):

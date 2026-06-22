@@ -3566,3 +3566,157 @@ async function submitFeedback() {
         statusDiv.innerHTML = '<div class="alert alert-danger">An error occurred. Please try again.</div>';
     }
 }
+
+// ==================== Star Rating ====================
+
+(function () {
+    let currentRating = 0;
+
+    function initStarRating() {
+        const container = document.getElementById('starRating');
+        if (!container) return;
+
+        const stars = container.querySelectorAll('.star');
+
+        // Hover effects
+        stars.forEach(star => {
+            star.addEventListener('mouseenter', () => {
+                const val = parseInt(star.dataset.value);
+                highlightStars(stars, val);
+            });
+
+            star.addEventListener('mouseleave', () => {
+                highlightStars(stars, currentRating);
+                stars.forEach(s => s.classList.remove('hovered'));
+            });
+
+            star.addEventListener('click', () => {
+                const val = parseInt(star.dataset.value);
+                currentRating = val;
+                highlightStars(stars, val);
+                submitRating(val);
+            });
+        });
+
+        // Load existing rating
+        loadMyRating(stars);
+    }
+
+    function highlightStars(stars, value) {
+        stars.forEach(s => {
+            const v = parseInt(s.dataset.value);
+            if (v <= value) {
+                s.classList.add('active');
+                s.classList.add('hovered');
+            } else {
+                s.classList.remove('active');
+                s.classList.remove('hovered');
+            }
+        });
+    }
+
+    async function loadMyRating(stars) {
+        try {
+            const resp = await fetch('/api/rating/my');
+            const data = await resp.json();
+            if (data.stars > 0) {
+                currentRating = data.stars;
+                highlightStars(stars, currentRating);
+                stars.forEach(s => s.classList.remove('hovered'));
+            }
+        } catch (e) {
+            // Silently ignore — rating is optional
+        }
+    }
+
+    async function submitRating(starCount) {
+        const thanksEl = document.getElementById('rateThanks');
+        const thanksText = document.getElementById('rateThanksText');
+
+        try {
+            const resp = await fetch('/api/rating/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stars: starCount })
+            });
+
+            const data = await resp.json();
+
+            if (resp.ok) {
+                thanksText.textContent = data.updated ? 'Rating updated!' : 'Thanks for your rating!';
+                thanksEl.style.display = 'block';
+                setTimeout(() => {
+                    thanksEl.style.display = 'none';
+                }, 3000);
+
+                // Show share modal for 3+ stars
+                if (starCount >= 3) {
+                    setTimeout(() => {
+                        openShareModal();
+                    }, 600);
+                }
+            }
+        } catch (e) {
+            console.error('Rating error:', e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', initStarRating);
+})();
+
+// ==================== Share Modal ====================
+
+function openShareModal() {
+    const modal = document.getElementById('shareAppModal');
+    if (modal) modal.classList.add('active');
+}
+
+function closeShareModal() {
+    const modal = document.getElementById('shareAppModal');
+    if (modal) modal.classList.remove('active');
+    // Hide copied message
+    const msg = document.getElementById('shareCopiedMsg');
+    if (msg) msg.style.display = 'none';
+}
+
+function shareVia(platform) {
+    const url = window.location.origin;
+    const text = 'Check out this awesome FFCS Timetable Maker for VIT Bhopal! Build your perfect timetable easily';
+    const encoded = encodeURIComponent(text + '\n' + url);
+
+    switch (platform) {
+        case 'whatsapp':
+            window.open(`https://wa.me/?text=${encoded}`, '_blank');
+            break;
+        case 'reddit':
+            window.open(`https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(text)}`, '_blank');
+            break;
+        case 'telegram':
+            window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+            break;
+        case 'copy':
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(() => showCopiedMsg());
+            } else {
+                // Fallback
+                const ta = document.createElement('textarea');
+                ta.value = url;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showCopiedMsg();
+            }
+            break;
+    }
+}
+
+function showCopiedMsg() {
+    const msg = document.getElementById('shareCopiedMsg');
+    if (msg) {
+        msg.style.display = 'block';
+        setTimeout(() => { msg.style.display = 'none'; }, 3000);
+    }
+}

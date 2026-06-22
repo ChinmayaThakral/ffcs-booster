@@ -4,6 +4,47 @@
 
 {% block content %}
 <div class="container" style="padding: 2rem; max-width: 1200px; margin: 0 auto;">
+
+    <!-- Ratings Summary Card (Admin Only) -->
+    <div class="ratings-summary-card">
+        <h3><i class="fas fa-star"></i> App Ratings Summary</h3>
+        {% if total_ratings > 0 %}
+        <div class="ratings-stats">
+            <div class="ratings-big-number">
+                <div class="big-avg">{{ avg_rating }}</div>
+                <div class="big-avg-stars">
+                    {% for i in range(1, 6) %}
+                        {% if avg_rating >= i %}
+                            <i class="fas fa-star"></i>
+                        {% elif avg_rating >= i - 0.5 %}
+                            <i class="fas fa-star-half-alt"></i>
+                        {% else %}
+                            <i class="far fa-star"></i>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                <div class="total-count">{{ total_ratings }} rating{{ 's' if total_ratings != 1 else '' }}</div>
+            </div>
+            <div class="ratings-bars">
+                {% for star in [5, 4, 3, 2, 1] %}
+                <div class="rating-bar-row">
+                    <span class="bar-label">{{ star }} <i class="fas fa-star" style="color: #f5a623; font-size: 0.75rem;"></i></span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: {{ (distribution[star] / total_ratings * 100)|round(1) }}%;"></div>
+                    </div>
+                    <span class="bar-count">{{ distribution[star] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 1rem; color: #7d6608;">
+            <i class="far fa-star" style="font-size: 2rem; opacity: 0.5; margin-bottom: 8px;"></i>
+            <p>No ratings yet.</p>
+        </div>
+        {% endif %}
+    </div>
+
     <div class="card">
         <div class="card-header"
             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
