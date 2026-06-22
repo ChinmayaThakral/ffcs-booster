@@ -108,6 +108,23 @@ function showFacultyModal(course, slots) {
         </tr>
     `;
 
+    // Sort slots by slot_code (e.g., A11 before B11, B11 before C11)
+    slots.sort((a, b) => {
+        // Extract the first individual slot from composite codes like "A11+A12+A13"
+        const getFirstSlot = (code) => (code || '').replace(/\//g, '+').split('+')[0].trim().toUpperCase();
+        const slotA = getFirstSlot(a.slot_code);
+        const slotB = getFirstSlot(b.slot_code);
+        // Split into letter prefix and numeric suffix for natural sort
+        const parseSlot = (s) => {
+            const match = s.match(/^([A-Z]+)(\d+)$/);
+            return match ? { letter: match[1], num: parseInt(match[2], 10) } : { letter: s, num: 0 };
+        };
+        const pA = parseSlot(slotA);
+        const pB = parseSlot(slotB);
+        if (pA.letter !== pB.letter) return pA.letter.localeCompare(pB.letter);
+        return pA.num - pB.num;
+    });
+
     // Populate slots table
     if (slots.length === 0) {
         slotsTableBody.innerHTML = `
@@ -678,7 +695,7 @@ function viewAllCourses() {
             content.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <p style="margin: 0;">Total courses: <strong>${coursesData.courses.length}</strong></p>
-                    <button id="bulkDeleteBtn" class="btn btn-danger btn-sm" disabled onclick="deleteSelectedCourses()">
+                    <button id="courseBulkDeleteBtn" class="btn btn-danger btn-sm" disabled onclick="deleteSelectedCourses()">
                         <i class="fas fa-trash"></i> Delete Selected
                     </button>
                 </div>
@@ -772,7 +789,7 @@ function toggleCourseSelection(id) {
 }
 
 function updateDeleteButtonState() {
-    const btn = document.getElementById('bulkDeleteBtn');
+    const btn = document.getElementById('courseBulkDeleteBtn');
     const count = selectedCoursesToDelete.size;
 
     if (count > 0) {
@@ -792,7 +809,7 @@ async function deleteSelectedCourses() {
         return;
     }
 
-    const btn = document.getElementById('bulkDeleteBtn');
+    const btn = document.getElementById('courseBulkDeleteBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
 
@@ -2497,6 +2514,10 @@ function resetManualImportModal() {
     document.getElementById('manualImportReviewBody').innerHTML = '';
     document.getElementById('manualImportReviewStatus').innerHTML = '';
 
+    // Re-enable import button
+    const importBtn = document.getElementById('manualImportSubmitBtn');
+    if (importBtn) importBtn.disabled = false;
+
     // Update step UI
     updateManualImportStepUI();
 }
@@ -2666,9 +2687,11 @@ async function submitManualImportData() {
                     </div>
                 `;
 
+                // Close the modal after a brief delay and refresh the page
                 setTimeout(() => {
                     closeManualImportModal();
-                    location.reload();
+                    loadRegisteredCoursesList();
+                    alert(`Course imported successfully! ${result.course_code} - ${result.slots_added} faculty/slot options added.`);
                 }, 1500);
             } else {
                 statusDiv.innerHTML = `<div class="import-error-item"><i class="fas fa-times"></i> ${result.message}</div>`;
@@ -2929,10 +2952,13 @@ function resetOcrModal() {
     document.getElementById('ocrJ').value = '0';
     document.getElementById('ocrC').value = '4';
 
-    // Reset image previews
-    document.getElementById('ocrImagePreviews').innerHTML = '';
-    document.getElementById('ocrProcessBtn').disabled = true;
-    document.getElementById('ocrProgress').style.display = 'none';
+    // Reset image previews (element may not exist in current template)
+    const imagePreviews = document.getElementById('ocrImagePreviews');
+    if (imagePreviews) imagePreviews.innerHTML = '';
+    const processBtn = document.getElementById('ocrProcessBtn');
+    if (processBtn) processBtn.disabled = false;
+    const ocrProgress = document.getElementById('ocrProgress');
+    if (ocrProgress) ocrProgress.style.display = 'none';
 
     // Reset AI output textarea and status
     document.getElementById('aiOutputText').value = '';
@@ -2941,6 +2967,10 @@ function resetOcrModal() {
     // Reset review table
     document.getElementById('ocrReviewBody').innerHTML = '';
     document.getElementById('ocrReviewStatus').innerHTML = '';
+
+    // Re-enable import button
+    const importBtn = document.getElementById('ocrImportBtn');
+    if (importBtn) importBtn.disabled = false;
 
     updateOcrStepUI();
 }
@@ -3237,9 +3267,11 @@ async function importOcrData() {
                     </div>
                 `;
 
+                // Close the modal after a brief delay and refresh the page
                 setTimeout(() => {
                     closeOcrImportModal();
-                    location.reload();
+                    loadRegisteredCoursesList();
+                    alert(`Course imported successfully! ${result.course_code} - ${result.slots_added} faculty/slot options added.`);
                 }, 1500);
             } else {
                 statusDiv.innerHTML = `<div class="import-error-item"><i class="fas fa-times"></i> ${result.message}</div>`;
