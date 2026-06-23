@@ -7,6 +7,10 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key-please-change-in-production'
 DEBUG = True
 
+# Session configuration — guest session cookie lifetime (activated by before_request in app.py)
+from datetime import timedelta
+PERMANENT_SESSION_LIFETIME = timedelta(days=7)
+
 # Database configuration
 # Database configuration
 # 1. Prefer External DB (Postgres) if available (e.g. Render/Vercel/Neon)

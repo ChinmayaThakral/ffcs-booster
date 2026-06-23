@@ -40,7 +40,12 @@ app.register_blueprint(admin_bp, url_prefix='/admin')
 with app.app_context():
     db.create_all()
 
-from flask import request
+from flask import request, session as flask_session
+
+@app.before_request
+def make_session_permanent():
+    """Ensure session cookie persists for 7 days (not deleted on browser close)."""
+    flask_session.permanent = True
 
 @app.after_request
 def add_header(response):
