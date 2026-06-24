@@ -7,6 +7,108 @@ let selectedCourse = null;
 let selectedSlotId = null;
 let selectedCells = [];  // For manual cell selection
 
+// Color palette for different courses (mirrors main.py COURSE_COLORS)
+const COURSE_COLORS = [
+    '#90EE90',  // Light green
+    '#87CEEB',  // Sky blue
+    '#FFB6C1',  // Light pink
+    '#DDA0DD',  // Plum
+    '#F0E68C',  // Khaki
+    '#FF7F50',  // Coral
+    '#00CED1',  // Dark Turquoise
+    '#FFE4B5',  // Moccasin
+    '#E6E6FA',  // Lavender
+    '#FFDAB9',  // Peach puff
+    '#DA70D6',  // Orchid
+    '#FFA07A',  // Light salmon
+];
+
+/**
+ * Refresh the timetable grid and registered courses list without a full page reload.
+ * Fetches fresh registration data from the API and repaints all UI elements.
+ */
+async function refreshTimetableGrid() {
+    try {
+        const response = await fetch('/api/registration/');
+        const data = await response.json();
+        const registrations = data.registrations || [];
+
+        // 1. Build occupied slots map (mirrors main.py logic)
+        const courseColors = {};
+        let colorIndex = 0;
+        const occupiedSlots = {};
+
+        for (const reg of registrations) {
+            if (reg.slot && reg.slot.course) {
+                const courseCode = reg.slot.course.code;
+                if (!(courseCode in courseColors)) {
+                    courseColors[courseCode] = COURSE_COLORS[colorIndex % COURSE_COLORS.length];
+                    colorIndex++;
+                }
+            }
+        }
+
+        for (const reg of registrations) {
+            if (reg.slot) {
+                const courseCode = reg.slot.course ? reg.slot.course.code : '';
+                const individualSlots = reg.slot.slot_code.replace(/\//g, '+').split('+');
+                for (const slotCode of individualSlots) {
+                    const trimmed = slotCode.trim();
+                    if (trimmed) {
+                        occupiedSlots[trimmed] = {
+                            registration_id: reg.id,
+                            course_code: courseCode,
+                            course_name: reg.slot.course ? reg.slot.course.name : '',
+                            venue: reg.slot.venue || '',
+                            faculty: reg.slot.faculty_name || '',
+                            slot_code: reg.slot.slot_code,
+                            color: courseColors[courseCode] || '#90EE90'
+                        };
+                    }
+                }
+            }
+        }
+
+        // 2. Update the global OCCUPIED_SLOTS so other code (e.g. color legend) stays in sync
+        window.OCCUPIED_SLOTS = occupiedSlots;
+
+        // 3. Repaint every slot cell in the timetable grid
+        const allSlotCells = document.querySelectorAll('.slot-cell');
+        for (const cell of allSlotCells) {
+            const slotCode = cell.dataset.slot;
+            if (!slotCode) continue;
+
+            const info = occupiedSlots[slotCode];
+            if (info) {
+                // Cell is occupied — mark as registered
+                cell.classList.add('registered');
+                cell.classList.remove('selected');
+                cell.dataset.registrationId = info.registration_id;
+                cell.style.backgroundColor = info.color;
+                cell.innerHTML = `<div class="slot-content"><span class="slot-code">${slotCode}</span><br><span class="course-code">${info.course_code}</span><br><span class="slot-venue">${info.venue}</span></div>`;
+            } else {
+                // Cell is empty — clear it
+                cell.classList.remove('registered', 'selected');
+                delete cell.dataset.registrationId;
+                cell.style.backgroundColor = '';
+                cell.innerHTML = `<div class="slot-empty">${slotCode}</div>`;
+            }
+        }
+
+        // 4. Clear any lingering cell selection state
+        selectedCells = [];
+        updateSelectedCellsDisplay();
+
+        // 5. Refresh the registered courses list below the timetable
+        loadRegisteredCoursesList();
+
+    } catch (error) {
+        console.error('Error refreshing timetable:', error);
+        // Fallback to full reload if the refresh fails
+        location.reload();
+    }
+}
+
 // DOM Ready
 document.addEventListener('DOMContentLoaded', function () {
     initializeApp();
@@ -274,9 +376,10 @@ async function registerSlot(slotId) {
             await createNewRegistration(finalSlotId);
         }
     } catch (error) {
-        // Only reset if error, success reloads page
-        setRegisterButtonLoading(false);
         console.error("Registration flow error:", error);
+    } finally {
+        // Always reset button state
+        setRegisterButtonLoading(false);
     }
 }
 
@@ -307,8 +410,8 @@ async function createNewRegistration(slotId) {
 
     if (response.ok) {
         closeFacultyModal();
-        // Reload to show updated timetable grid
-        location.reload();
+        // Refresh timetable grid without full page reload
+        await refreshTimetableGrid();
     } else {
         alert(data.error || 'Registration failed.');
         throw new Error(data.error || 'Registration failed.'); // Propagate error
@@ -327,8 +430,8 @@ async function updateRegistration(slotId, regId) {
 
     if (response.ok) {
         closeFacultyModal();
-        // Reload to show updated timetable grid
-        location.reload();
+        // Refresh timetable grid without full page reload
+        await refreshTimetableGrid();
     } else {
         alert(data.error || 'Update failed');
         throw new Error(data.error || 'Update failed');
@@ -418,7 +521,7 @@ async function deleteRegistration(regId) {
         });
 
         if (response.ok) {
-            location.reload();
+            await refreshTimetableGrid();
         } else {
             alert('Error removing course.');
         }
@@ -563,7 +666,7 @@ async function bulkDeleteRegistrations() {
         const data = await response.json();
 
         if (response.ok) {
-            location.reload();
+            await refreshTimetableGrid();
         } else {
             alert('Error: ' + (data.error || 'Failed to delete registrations'));
         }
@@ -827,9 +930,14 @@ async function deleteSelectedCourses() {
         if (response.ok) {
             // Success
             alert(data.message);
-            // viewAllCourses(); // Reload modal
-            // loadRegisteredCoursesList(); // Reload registered list (background)
-            location.reload(); // Simplest to sync everything
+            closeAllCoursesModal();
+            // Clear any stale search results
+            const searchResults = document.getElementById('searchResults');
+            const searchInput = document.getElementById('courseSearch');
+            if (searchResults) searchResults.innerHTML = '';
+            if (searchInput) searchInput.value = '';
+            
+            await refreshTimetableGrid();
         } else {
             alert('Error: ' + data.error);
             btn.disabled = false;
@@ -859,11 +967,16 @@ async function clearAllRegistrations() {
         const response = await fetch('/api/registration/');
         const data = await response.json();
 
-        for (const reg of data.registrations) {
-            await fetch(`/api/registration/${reg.id}`, { method: 'DELETE' });
+        if (data.registrations.length > 0) {
+            const regIds = data.registrations.map(r => r.id);
+            await fetch('/api/registration/bulk-delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ registration_ids: regIds })
+            });
         }
 
-        location.reload();
+        await refreshTimetableGrid();
 
     } catch (error) {
         console.error('Error clearing registrations:', error);
@@ -996,8 +1109,9 @@ async function importHtmlFiles() {
             selectedFiles = [];
 
             if (data.success_count > 0) {
-                setTimeout(() => {
-                    location.reload();
+                setTimeout(async () => {
+                    closeHtmlImportModal();
+                    await refreshTimetableGrid();
                 }, 2000);
             } else {
                 importBtn.disabled = false;
@@ -1065,19 +1179,15 @@ async function submitManualEntry(event) {
         if (response.ok) {
             alert(`Success! ${data.message}`);
             closeManualEntryModal();
-            location.reload();
+            await refreshTimetableGrid();
         } else {
             alert(`Error: ${data.error}`);
-            // Re-enable button on error
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-check"></i> Add Course';
-            }
         }
     } catch (error) {
         console.error('Error:', error);
         alert('Error adding course. Please try again.');
-        // Re-enable button on error
+    } finally {
+        // Always re-enable button
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-check"></i> Add Course';
@@ -2441,10 +2551,10 @@ async function importCsvFile() {
                     </div>
                 `;
 
-                // Clear and reload after a delay
-                setTimeout(() => {
+                // Clear and refresh after a delay
+                setTimeout(async () => {
                     closeCsvUploadModal();
-                    location.reload();
+                    await refreshTimetableGrid();
                 }, 1500);
             } else {
                 statusDiv.innerHTML = `<div class="import-error-item"><i class="fas fa-times"></i> ${result.message}</div>`;
@@ -2922,8 +3032,9 @@ async function saveModifiedCourse() {
 
         if (response.ok) {
             statusDiv.innerHTML = `<div class="import-success"><i class="fas fa-check"></i> ${data.message}</div>`;
-            setTimeout(() => {
-                location.reload();
+            setTimeout(async () => {
+                closeModifyCourseModal();
+                await refreshTimetableGrid();
             }, 1000);
         } else {
             statusDiv.innerHTML = `<div class="import-error-item">Error: ${data.error}</div>`;
@@ -3480,9 +3591,9 @@ async function importCsvFile() {
             if (statusDiv) statusDiv.innerHTML = successMsg;
 
             if (data.success_count > 0) {
-                setTimeout(() => {
+                setTimeout(async () => {
                     closeCsvUploadModal();
-                    location.reload();
+                    await refreshTimetableGrid();
                 }, 2500);
             } else {
                 if (importBtn) importBtn.disabled = false;
