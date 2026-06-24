@@ -464,7 +464,13 @@ function clearCellSelection() {
     updateSelectedCellsDisplay();
 }
 
-async function deleteRegistration(regId) {
+async function deleteRegistration(regId, btn = null) {
+    if (btn) {
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.disabled = true;
+    }
+
     try {
         const response = await fetch(`/api/registration/${regId}`, {
             method: 'DELETE'
@@ -474,10 +480,18 @@ async function deleteRegistration(regId) {
             await refreshTimetableGrid();
         } else {
             alert('Error removing course.');
+            if (btn) {
+                btn.innerHTML = btn.dataset.originalHtml;
+                btn.disabled = false;
+            }
         }
     } catch (error) {
         console.error('Delete error:', error);
         alert('Error removing course.');
+        if (btn) {
+            btn.innerHTML = btn.dataset.originalHtml;
+            btn.disabled = false;
+        }
     }
 }
 
@@ -562,7 +576,7 @@ async function loadRegisteredCoursesList() {
                                 <button class="edit-btn" onclick="openEditRegistrationModal('${reg.slot?.course?.id}', '${reg.id}', '${reg.slot?.id}')" title="Edit Slot/Faculty">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="delete-btn" onclick="deleteRegistration('${reg.id}')" title="Remove">
+                                <button class="delete-btn" onclick="deleteRegistration('${reg.id}', this)" title="Remove">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </td>
@@ -689,7 +703,7 @@ function viewRegisteredCourses() {
                                 <td>${reg.slot?.venue || 'N/A'}</td>
                                 <td>${reg.slot?.course?.c || 0}</td>
                                 <td>
-                                    <button class="delete-btn" onclick="deleteRegistration('${reg.id}'); closeRegisteredModal();">
+                                    <button class="delete-btn" onclick="deleteRegistration('${reg.id}', this); closeRegisteredModal();">
                                         <i class="fas fa-trash"></i> Remove
                                     </button>
                                 </td>
