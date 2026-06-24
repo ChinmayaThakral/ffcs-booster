@@ -115,22 +115,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function initializeApp() {
-    // Set up event listeners
-    const searchInput = document.getElementById('courseSearch');
-    const searchBtn = document.getElementById('searchBtn');
-
-    if (searchInput) {
-        searchInput.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                searchCourses();
-            }
-        });
-    }
-
-    if (searchBtn) {
-        searchBtn.addEventListener('click', searchCourses);
-    }
-
     // Load registered courses list
     loadRegisteredCoursesList();
 
@@ -143,41 +127,7 @@ function initializeApp() {
     }
 }
 
-// ==================== Course Search ====================
 
-async function searchCourses() {
-    const query = document.getElementById('courseSearch').value.trim();
-    const resultsDiv = document.getElementById('searchResults');
-
-    if (!query) {
-        resultsDiv.innerHTML = '<p class="empty-message">Enter a course code to search.</p>';
-        return;
-    }
-
-    resultsDiv.innerHTML = '<div class="loading-spinner"></div>';
-
-    try {
-        const response = await fetch(`/api/courses/search?q=${encodeURIComponent(query)}`);
-        const data = await response.json();
-
-        if (data.courses.length === 0) {
-            resultsDiv.innerHTML = '<p class="empty-message">No courses found.</p>';
-            return;
-        }
-
-        resultsDiv.innerHTML = data.courses.map(course => `
-            <div class="search-result-item" onclick="selectCourse('${course.id}')">
-                <div class="course-code">${course.code}</div>
-                <div class="course-name">${course.name}</div>
-                <div class="course-credits">Credits: ${course.c} (${course.ltpjc})</div>
-            </div>
-        `).join('');
-
-    } catch (error) {
-        console.error('Search error:', error);
-        resultsDiv.innerHTML = '<p class="empty-message">Error searching courses.</p>';
-    }
-}
 
 // ==================== Faculty Selection Modal ====================
 
@@ -776,11 +726,11 @@ function viewAllCourses() {
         fetch('/api/registration/').then(r => r.json())
     ])
         .then(([coursesData, regData]) => {
-            const registeredCourseIds = new Set();
+            const registeredCoursesMap = new Map();
             if (regData.registrations) {
                 regData.registrations.forEach(reg => {
                     if (reg.slot && reg.slot.course) {
-                        registeredCourseIds.add(reg.slot.course.id);
+                        registeredCoursesMap.set(reg.slot.course.id, reg);
                     }
                 });
             }
@@ -818,7 +768,8 @@ function viewAllCourses() {
                     </thead>
                     <tbody>
                         ${coursesData.courses.map(course => {
-                const isRegistered = registeredCourseIds.has(course.id);
+                const registration = registeredCoursesMap.get(course.id);
+                const isRegistered = !!registration;
                 const rowClass = isRegistered ? 'registered-row' : '';
                 return `
                             <tr class="${rowClass}">
@@ -832,8 +783,8 @@ function viewAllCourses() {
                                 <td>
                                     <div style="display: flex; gap: 5px; align-items: center;">
                                         ${isRegistered ?
-                        `<button class="btn btn-success btn-sm btn-added" disabled style="opacity: 0.7; cursor: default;">
-                                                <i class="fas fa-check"></i> Added
+                        `<button class="btn btn-warning btn-sm" onclick="openEditRegistrationModal('${course.id}', '${registration.id}', '${registration.slot.id}'); closeAllCoursesModal();" title="Modify Faculty">
+                                                <i class="fas fa-edit"></i> Modify
                                             </button>` :
                         `<button class="btn btn-primary btn-sm" onclick="selectCourse('${course.id}'); closeAllCoursesModal();">
                                                 <i class="fas fa-plus"></i> Add
@@ -1131,13 +1082,50 @@ async function importHtmlFiles() {
 
 // ==================== Manual Entry ====================
 
-function openManualEntryModal() {
+window.MANUAL_COURSE_MAP = {};
+window.MANUAL_NAME_TO_CODE_MAP = {};
+
+async function openManualEntryModal() {
     document.getElementById('manualEntryModal').classList.add('active');
     document.getElementById('manualEntryForm').reset();
 
     // Pre-fill slot code with selected cells
     if (selectedCells.length > 0) {
         document.getElementById('manualSlotCode').value = selectedCells.join('+');
+    }
+
+    // Fetch and populate datalists for autocomplete
+    try {
+        const response = await fetch('/api/courses/options');
+        if (response.ok) {
+            const data = await response.json();
+            
+            const codeList = document.getElementById('manualCourseCodeList');
+            const nameList = document.getElementById('manualCourseNameList');
+            const facultyList = document.getElementById('manualFacultyList');
+            
+            if (codeList) codeList.innerHTML = data.course_codes.map(c => `<option value="${c}">`).join('');
+            if (nameList) nameList.innerHTML = data.course_names.map(n => `<option value="${n}">`).join('');
+            if (facultyList) facultyList.innerHTML = data.faculty_names.map(f => `<option value="${f}">`).join('');
+            window.MANUAL_COURSE_MAP = data.course_map || {};
+            window.MANUAL_NAME_TO_CODE_MAP = data.name_to_code_map || {};
+        }
+    } catch (error) {
+        console.error('Error fetching course options:', error);
+    }
+}
+
+function handleManualCourseCodeInput(code) {
+    const uppercaseCode = code.trim().toUpperCase();
+    if (window.MANUAL_COURSE_MAP && window.MANUAL_COURSE_MAP[uppercaseCode]) {
+        document.getElementById('manualCourseName').value = window.MANUAL_COURSE_MAP[uppercaseCode];
+    }
+}
+
+function handleManualCourseNameInput(name) {
+    const trimmedName = name.trim();
+    if (window.MANUAL_NAME_TO_CODE_MAP && window.MANUAL_NAME_TO_CODE_MAP[trimmedName]) {
+        document.getElementById('manualCourseCode').value = window.MANUAL_NAME_TO_CODE_MAP[trimmedName];
     }
 }
 
@@ -2839,14 +2827,22 @@ function openModifyCoursesModal() {
             }
 
             content.innerHTML = `
-                <div style="margin-bottom: 16px;">
-                    <h3>Select a Course to Modify</h3>
-                    <p style="color: var(--text-muted); font-size: 0.9rem;">Click 'Edit' to modify faculty and slots.</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div>
+                        <h3 style="margin: 0;">Select a Course to Modify</h3>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">Click 'Edit' to modify faculty and slots.</p>
+                    </div>
+                    <button id="courseBulkDeleteBtn" class="btn btn-danger btn-sm" disabled onclick="deleteSelectedCourses()">
+                        <i class="fas fa-trash"></i> Delete Selected
+                    </button>
                 </div>
                 <div style="max-height: 60vh; overflow-y: auto;">
                 <table class="registered-table">
-                    <thead>
+                    <thead style="position: sticky; top: 0; background: var(--bg-secondary); z-index: 1;">
                         <tr>
+                            <th style="width: 40px; text-align: center;">
+                                <input type="checkbox" id="selectAllCourses" onclick="toggleAllCourses(this)">
+                            </th>
                             <th>Code</th>
                             <th>Name</th>
                             <th>Target</th>
@@ -2855,6 +2851,9 @@ function openModifyCoursesModal() {
                     <tbody>
                         ${data.courses.map(course => `
                             <tr>
+                                <td style="text-align: center;">
+                                    <input type="checkbox" class="course-checkbox" value="${course.id}" onclick="toggleCourseSelection('${course.id}')">
+                                </td>
                                 <td><strong>${course.code}</strong></td>
                                 <td>${course.name}</td>
                                 <td>
@@ -2868,6 +2867,10 @@ function openModifyCoursesModal() {
                 </table>
                 </div>
             `;
+            
+            // Reset selection state
+            selectedCoursesToDelete.clear();
+            updateDeleteButtonState();
         })
         .catch(err => {
             console.error(err);

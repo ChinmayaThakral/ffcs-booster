@@ -18,29 +18,6 @@ def get_scoped_courses():
         # but to be safe return Filter by False
         return Course.query.filter(db.false())
 
-@courses_bp.route('/search')
-def search_courses():
-    """Search courses by code or name."""
-    query_text = request.args.get('q', '').strip()
-    
-    if not query_text:
-        return jsonify({'courses': []})
-    
-    # Scope query
-    base_query = get_scoped_courses()
-    
-    courses = base_query.filter(
-        db.or_(
-            Course.code.ilike(f'%{query_text}%'),
-            Course.name.ilike(f'%{query_text}%')
-        )
-    ).limit(20).all()
-    
-    return jsonify({
-        'courses': [course.to_dict() for course in courses]
-    })
-
-
 @courses_bp.route('/<course_id>')
 def get_course(course_id):
     """Get course details by ID."""
@@ -79,6 +56,34 @@ def get_all_courses():
     })
 
 
+@courses_bp.route('/options')
+def get_course_options():
+    """Get unique course codes, names, and faculty names for autocomplete."""
+    base_query = get_scoped_courses()
+    
+    # Distinct course codes and names
+    courses = base_query.with_entities(Course.code, Course.name).distinct().all()
+    course_codes = list({c.code for c in courses if c.code})
+    course_names = list({c.name for c in courses if c.name})
+    
+    # Distinct faculty names associated with the user's courses
+    from models import db, Faculty, Slot
+    faculties = db.session.query(Faculty.name).join(Slot).join(Course).filter(
+        Course.id.in_(base_query.with_entities(Course.id))
+    ).distinct().all()
+    faculty_names = [f.name for f in faculties if f.name]
+    course_map = {c.code: c.name for c in courses if c.code and c.name}
+    name_to_code_map = {c.name: c.code for c in courses if c.code and c.name}
+    
+    return jsonify({
+        'course_codes': sorted(course_codes),
+        'course_names': sorted(course_names),
+        'faculty_names': sorted(faculty_names),
+        'course_map': course_map,
+        'name_to_code_map': name_to_code_map
+    })
+
+
 @courses_bp.route('/manual', methods=['POST'])
 def add_course_manually():
     """Add a course manually with slot and auto-register."""
@@ -100,29 +105,37 @@ def add_course_manually():
     try:
         # Check if course with same code already exists (Scoped)
         base_query = get_scoped_courses()
-        existing_course = base_query.filter_by(code=data['course_code'].upper()).first()
+        course = base_query.filter_by(code=data['course_code'].upper()).first()
         
-        # If course exists, delete it first (along with its slots and registrations via cascade)
-        if existing_course:
-            db.session.delete(existing_course)
+        if course and course.name.strip().lower() != data['course_name'].strip().lower():
+            return jsonify({
+                'error': f"Course code '{course.code}' already exists with name '{course.name}'. Please use the exact existing name or a different code."
+            }), 400
+            
+        # Check if course with same name already exists but under a different code
+        course_by_name = base_query.filter(db.func.lower(Course.name) == data['course_name'].strip().lower()).first()
+        if course_by_name and course_by_name.code != data['course_code'].upper():
+            return jsonify({
+                'error': f"Course name '{course_by_name.name}' is already assigned to course code '{course_by_name.code}'. Please use the exact existing code or a different name."
+            }), 400
+        
+        # Create new course if it doesn't exist
+        if not course:
+            course = Course(
+                code=data['course_code'].upper(),
+                name=data['course_name'],
+                l=0,
+                t=0,
+                p=0,
+                j=0,
+                c=int(data.get('credits', 0)),
+                course_type='N/A',
+                category='N/A',
+                user_id=user_id,
+                guest_id=guest_id
+            )
+            db.session.add(course)
             db.session.flush()
-        
-        # Create new course
-        course = Course(
-            code=data['course_code'].upper(),
-            name=data['course_name'],
-            l=0,
-            t=0,
-            p=0,
-            j=0,
-            c=int(data.get('credits', 0)),
-            course_type='N/A',
-            category='N/A',
-            user_id=user_id,
-            guest_id=guest_id
-        )
-        db.session.add(course)
-        db.session.flush()
         
         # Find or create faculty (Faculty is shared? Or should be scoped?
         # Faculty names are generic. Let's keep faculty shared for now to avoid DUPLICATE faculty table boom, 
@@ -134,36 +147,54 @@ def add_course_manually():
             db.session.add(faculty)
             db.session.flush()
         
-        # Create slot
+        # Check if this exact slot (Course + Faculty + Slot Code) already exists
+        slot_code = data['slot_code'].upper()
         venue = data.get('venue', 'N/A').strip().upper() or 'N/A'
-        slot = Slot(
-            slot_code=data['slot_code'].upper(),
+        
+        slot = Slot.query.filter_by(
+            slot_code=slot_code,
             course_id=course.id,
-            faculty_id=faculty.id,
-            venue=venue,
-            available_seats=70,
-            total_seats=70
-        )
-        db.session.add(slot)
-        db.session.flush()
+            faculty_id=faculty.id
+        ).first()
         
-        # Auto-register
-        registration = Registration(slot_id=slot.id)
+        if not slot:
+            slot = Slot(
+                slot_code=slot_code,
+                course_id=course.id,
+                faculty_id=faculty.id,
+                venue=venue,
+                available_seats=70,
+                total_seats=70
+            )
+            db.session.add(slot)
+            db.session.flush()
+        
+        # Auto-register if not already registered
+        reg_query = Registration.query.filter_by(slot_id=slot.id)
         if user_id:
-            registration.user_id = user_id
+            reg_query = reg_query.filter_by(user_id=user_id)
         else:
-            registration.guest_id = guest_id
+            reg_query = reg_query.filter_by(guest_id=guest_id)
             
-        db.session.add(registration)
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f"Course {course.code} added and registered successfully!",
-            'course': course.to_dict(),
-            'slot': slot.to_dict()
-        }), 201
+        if not reg_query.first():
+            registration = Registration(slot_id=slot.id)
+            if user_id:
+                registration.user_id = user_id
+            else:
+                registration.guest_id = guest_id
+                
+            db.session.add(registration)
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f"Course {course.code} added and registered successfully!",
+                'course': course.to_dict(),
+                'slot': slot.to_dict()
+            }), 201
+        else:
+            db.session.rollback()
+            return jsonify({'error': 'You are already registered for this exact slot and faculty.'}), 400
         
     except Exception as e:
         db.session.rollback()
