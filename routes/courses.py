@@ -75,12 +75,53 @@ def get_course_options():
     course_map = {c.code: c.name for c in courses if c.code and c.name}
     name_to_code_map = {c.name: c.code for c in courses if c.code and c.name}
     
+    # Distinct faculty names per course
+    course_faculties = db.session.query(Course.code, Faculty.name)\
+        .select_from(Course)\
+        .join(Slot, Course.id == Slot.course_id)\
+        .join(Faculty, Slot.faculty_id == Faculty.id)\
+        .filter(Course.id.in_(base_query.with_entities(Course.id)))\
+        .distinct().all()
+    
+    course_faculty_map = {}
+    for code, fname in course_faculties:
+        if code and fname:
+            if code not in course_faculty_map:
+                course_faculty_map[code] = []
+            course_faculty_map[code].append(fname)
+            
+    # Distinct faculty names per course and slot
+    course_slot_faculties = db.session.query(Course.code, Slot.slot_code, Faculty.name)\
+        .select_from(Course)\
+        .join(Slot, Course.id == Slot.course_id)\
+        .join(Faculty, Slot.faculty_id == Faculty.id)\
+        .filter(Course.id.in_(base_query.with_entities(Course.id)))\
+        .distinct().all()
+        
+    course_slot_faculty_map = {}
+    slot_faculty_map = {}
+    for code, scode, fname in course_slot_faculties:
+        if code and scode and fname:
+            if code not in course_slot_faculty_map:
+                course_slot_faculty_map[code] = {}
+            if scode not in course_slot_faculty_map[code]:
+                course_slot_faculty_map[code][scode] = []
+            course_slot_faculty_map[code][scode].append(fname)
+            
+            if scode not in slot_faculty_map:
+                slot_faculty_map[scode] = []
+            if fname not in slot_faculty_map[scode]:
+                slot_faculty_map[scode].append(fname)
+            
     return jsonify({
         'course_codes': sorted(course_codes),
         'course_names': sorted(course_names),
         'faculty_names': sorted(faculty_names),
         'course_map': course_map,
-        'name_to_code_map': name_to_code_map
+        'name_to_code_map': name_to_code_map,
+        'course_faculty_map': course_faculty_map,
+        'course_slot_faculty_map': course_slot_faculty_map,
+        'slot_faculty_map': slot_faculty_map
     })
 
 
@@ -169,7 +210,29 @@ def add_course_manually():
             db.session.add(slot)
             db.session.flush()
         
-        # Auto-register if not already registered
+        # Check for time clashes against existing registrations
+        from routes.registration import check_slot_clashes
+        clash_result = check_slot_clashes(slot)
+        if clash_result['has_clash']:
+            db.session.rollback()
+            clashing_info = ', '.join(c['course_code'] + ' (' + c.get('reason', 'Time overlap') + ')' for c in clash_result['clashing_slots'])
+            return jsonify({
+                'error': f'Slot clash detected with: {clashing_info}',
+                'clashing_slots': clash_result['clashing_slots']
+            }), 400
+        
+        # Check if already registered for this course (any slot)
+        existing_reg_query = Registration.query.join(Slot).filter(Slot.course_id == course.id)
+        if user_id:
+            existing_reg_query = existing_reg_query.filter(Registration.user_id == user_id)
+        else:
+            existing_reg_query = existing_reg_query.filter(Registration.guest_id == guest_id)
+        
+        if existing_reg_query.first():
+            db.session.rollback()
+            return jsonify({'error': f'You are already registered for course {course.code}.'}), 400
+        
+        # Auto-register if not already registered for this exact slot
         reg_query = Registration.query.filter_by(slot_id=slot.id)
         if user_id:
             reg_query = reg_query.filter_by(user_id=user_id)

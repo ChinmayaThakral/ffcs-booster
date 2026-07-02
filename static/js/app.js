@@ -100,7 +100,7 @@ async function refreshTimetableGrid() {
         updateSelectedCellsDisplay();
 
         // 5. Refresh the registered courses list below the timetable
-        loadRegisteredCoursesList();
+        loadRegisteredCoursesList(data);
 
     } catch (error) {
         console.error('Error refreshing timetable:', error);
@@ -497,15 +497,18 @@ async function deleteRegistration(regId, btn = null) {
 
 // ==================== Registered Courses ====================
 
-async function loadRegisteredCoursesList() {
+async function loadRegisteredCoursesList(preloadedData = null) {
     const listDiv = document.getElementById('registeredCoursesList');
 
     // Skip if element doesn't exist (e.g., on generate page)
     if (!listDiv) return;
 
     try {
-        const response = await fetch('/api/registration/');
-        const data = await response.json();
+        let data = preloadedData;
+        if (!data) {
+            const response = await fetch('/api/registration/');
+            data = await response.json();
+        }
 
         if (data.registrations.length === 0) {
             listDiv.innerHTML = '<p class="empty-message">No courses registered yet.</p>';
@@ -987,41 +990,45 @@ async function previewHtmlFiles(files) {
     const statusDiv = document.getElementById('uploadStatus');
     statusDiv.innerHTML = '<div class="loading-spinner"></div> Parsing files...';
 
-    const previews = [];
-    let errors = 0;
-
+    const formData = new FormData();
     for (const file of files) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const response = await fetch('/api/upload/parse', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                previews.push(`<div class="preview-item"><strong>${data.course.code}</strong> - ${data.course.name} (${data.slot_count} slots)</div>`);
-            } else {
-                previews.push(`<div class="preview-error-item">${file.name}: ${data.error}</div>`);
-                errors++;
-            }
-
-        } catch (error) {
-            previews.push(`<div class="preview-error-item">${file.name}: Error parsing</div>`);
-            errors++;
-        }
+        formData.append('files[]', file);
     }
 
-    statusDiv.innerHTML = `
-        <div class="preview-list">
-            ${previews.join('')}
-        </div>
-    `;
+    try {
+        const response = await fetch('/api/upload/parse-batch', {
+            method: 'POST',
+            body: formData
+        });
 
-    if (errors === files.length) {
+        const data = await response.json();
+        const previews = [];
+        let errors = 0;
+
+        if (response.ok) {
+            for (const res of data.results) {
+                if (res.status === 'success') {
+                    previews.push(`<div class="preview-item"><strong>${res.course.code}</strong> - ${res.course.name} (${res.slot_count} slots)</div>`);
+                } else {
+                    previews.push(`<div class="preview-error-item">${res.filename}: ${res.error}</div>`);
+                    errors++;
+                }
+            }
+        }
+
+        statusDiv.innerHTML = `
+            <div class="preview-list">
+                ${previews.join('')}
+            </div>
+        `;
+
+        if (errors === files.length) {
+            document.getElementById('importBtn').disabled = true;
+        }
+
+    } catch (error) {
+        console.error('Error batch parsing:', error);
+        statusDiv.innerHTML = `<div class="preview-error-item">Error parsing files in batch.</div>`;
         document.getElementById('importBtn').disabled = true;
     }
 }
@@ -1098,6 +1105,7 @@ async function importHtmlFiles() {
 
 window.MANUAL_COURSE_MAP = {};
 window.MANUAL_NAME_TO_CODE_MAP = {};
+window.MANUAL_COURSE_FACULTY_MAP = {};
 
 async function openManualEntryModal() {
     document.getElementById('manualEntryModal').classList.add('active');
@@ -1120,12 +1128,45 @@ async function openManualEntryModal() {
             
             if (codeList) codeList.innerHTML = data.course_codes.map(c => `<option value="${c}">`).join('');
             if (nameList) nameList.innerHTML = data.course_names.map(n => `<option value="${n}">`).join('');
-            if (facultyList) facultyList.innerHTML = data.faculty_names.map(f => `<option value="${f}">`).join('');
+            if (facultyList) facultyList.innerHTML = ''; // Don't show all by default
             window.MANUAL_COURSE_MAP = data.course_map || {};
             window.MANUAL_NAME_TO_CODE_MAP = data.name_to_code_map || {};
+            window.MANUAL_COURSE_FACULTY_MAP = data.course_faculty_map || {};
+            window.MANUAL_COURSE_SLOT_FACULTY_MAP = data.course_slot_faculty_map || {};
+            window.MANUAL_SLOT_FACULTY_MAP = data.slot_faculty_map || {};
         }
     } catch (error) {
         console.error('Error fetching course options:', error);
+    }
+}
+
+function updateManualFacultyList() {
+    const facultyList = document.getElementById('manualFacultyList');
+    if (!facultyList) return;
+    
+    const courseCode = document.getElementById('manualCourseCode').value.trim().toUpperCase();
+    const slotCode = document.getElementById('manualSlotCode').value.trim().toUpperCase();
+    
+    let faculties = [];
+    
+    if (slotCode) {
+        if (courseCode && window.MANUAL_COURSE_SLOT_FACULTY_MAP[courseCode] && window.MANUAL_COURSE_SLOT_FACULTY_MAP[courseCode][slotCode]) {
+            faculties = window.MANUAL_COURSE_SLOT_FACULTY_MAP[courseCode][slotCode];
+        } else if (!courseCode && window.MANUAL_SLOT_FACULTY_MAP[slotCode]) {
+            faculties = window.MANUAL_SLOT_FACULTY_MAP[slotCode];
+        } else {
+            faculties = []; // Slot provided but doesn't exist, show nothing
+        }
+    } else {
+        if (courseCode && window.MANUAL_COURSE_FACULTY_MAP[courseCode]) {
+            faculties = window.MANUAL_COURSE_FACULTY_MAP[courseCode];
+        }
+    }
+    
+    if (faculties.length > 0) {
+        facultyList.innerHTML = faculties.map(f => `<option value="${f}">`).join('');
+    } else {
+        facultyList.innerHTML = '';
     }
 }
 
@@ -1134,13 +1175,21 @@ function handleManualCourseCodeInput(code) {
     if (window.MANUAL_COURSE_MAP && window.MANUAL_COURSE_MAP[uppercaseCode]) {
         document.getElementById('manualCourseName').value = window.MANUAL_COURSE_MAP[uppercaseCode];
     }
+    updateManualFacultyList();
 }
 
 function handleManualCourseNameInput(name) {
     const trimmedName = name.trim();
+    let courseCode = '';
     if (window.MANUAL_NAME_TO_CODE_MAP && window.MANUAL_NAME_TO_CODE_MAP[trimmedName]) {
-        document.getElementById('manualCourseCode').value = window.MANUAL_NAME_TO_CODE_MAP[trimmedName];
+        courseCode = window.MANUAL_NAME_TO_CODE_MAP[trimmedName];
+        document.getElementById('manualCourseCode').value = courseCode;
     }
+    updateManualFacultyList();
+}
+
+function handleManualSlotInput(slot) {
+    updateManualFacultyList();
 }
 
 function closeManualEntryModal() {
@@ -2119,7 +2168,7 @@ function saveSuggestion(index) {
     const name = prompt("Enter a name for this configuration:", `Option #${index + 1} (${suggestion.total_credits} cr)`);
     if (!name) return; // User cancelled
 
-    const slotIds = suggestion.slots.map(s => s.slot_id);
+    const slotIds = suggestion.slots; // Send fully hydrated slots to make saved timetables resilient
 
     fetch('/api/generate/save', {
         method: 'POST',
@@ -3430,7 +3479,15 @@ async function saveCurrentTimetable() {
             return;
         }
 
-        const slotIds = regData.registrations.map(r => r.slot.id);
+        const slotIds = regData.registrations.map(r => ({
+            slot_id: r.slot.id,
+            slot_code: r.slot.slot_code,
+            course_code: r.slot.course ? r.slot.course.code : 'N/A',
+            course_name: r.slot.course ? r.slot.course.name : 'N/A',
+            faculty_name: r.slot.faculty_name || 'TBA',
+            venue: r.slot.venue,
+            credits: r.slot.course ? r.slot.course.c : 0
+        }));
         const count = regData.count;
         const credits = regData.total_credits;
 
@@ -3487,7 +3544,16 @@ async function loadSavedTimetablesList() {
             return;
         }
 
-        container.innerHTML = data.saved.map(item => `
+        container.innerHTML = data.saved.map(item => {
+            // Parse the string into an object so JSON.stringify formats it correctly for the HTML attribute
+            let slotsObj = [];
+            try {
+                slotsObj = typeof item.slot_ids === 'string' ? JSON.parse(item.slot_ids) : item.slot_ids;
+            } catch (e) {
+                console.error("Error parsing slot_ids", e);
+            }
+            
+            return `
             <div class="saved-card">
                 <div class="saved-card-header">
                     <h3>${item.name}</h3>
@@ -3498,7 +3564,7 @@ async function loadSavedTimetablesList() {
                     <p><i class="fas fa-star"></i> ${item.total_credits} Credits</p>
                 </div>
                 <div class="saved-card-actions">
-                    <button class="btn btn-sm btn-success" onclick='applySavedTimetable(${JSON.stringify(item.slot_ids)})'>
+                    <button class="btn btn-sm btn-success" onclick='applySavedTimetable(${JSON.stringify(slotsObj)})'>
                         <i class="fas fa-upload"></i> Load
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteSavedTimetable('${item.id}')">
@@ -3506,7 +3572,8 @@ async function loadSavedTimetablesList() {
                     </button>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
     } catch (err) {
         console.error('List error:', err);

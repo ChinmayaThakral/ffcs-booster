@@ -407,14 +407,51 @@ def apply_suggestion():
     if not slot_ids:
         return jsonify({'error': 'No slots provided'}), 400
     
-    # Convert string IDs to integers (handles JS precision issue)
-    try:
-        slot_ids = [int(sid) for sid in slot_ids]
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid slot ID format'}), 400
+    resolved_slot_ids = []
+    
+    # Check if slot_ids is a list of dictionaries (resilient format)
+    if isinstance(slot_ids[0], dict):
+        for s_data in slot_ids:
+            course_code = s_data.get('course_code')
+            slot_code = s_data.get('slot_code')
+            
+            # Find the course for this user
+            query = Course.query.filter_by(code=course_code)
+            if user_id:
+                query = query.filter_by(user_id=user_id)
+            else:
+                query = query.filter_by(guest_id=guest_id)
+            
+            course = query.first()
+            if course:
+                # Find the slot, prefer exact faculty match if possible
+                faculty_name = s_data.get('faculty_name')
+                slot_query = Slot.query.filter_by(course_id=course.id, slot_code=slot_code)
+                
+                if faculty_name and faculty_name != 'TBA':
+                    from models import Faculty
+                    slot_query_fac = slot_query.join(Faculty).filter(Faculty.name == faculty_name)
+                    slot = slot_query_fac.first()
+                    if not slot:
+                        slot = slot_query.first() # fallback
+                else:
+                    slot = slot_query.first()
+                    
+                if slot:
+                    resolved_slot_ids.append(slot.id)
+                else:
+                    return jsonify({'error': f"Slot {slot_code} for course {course_code} is no longer available in your imported data."}), 404
+            else:
+                return jsonify({'error': f"Course {course_code} is no longer available in your imported data. Please re-import it."}), 404
+    else:
+        # Convert string IDs to integers (handles JS precision issue)
+        try:
+            resolved_slot_ids = [int(sid) for sid in slot_ids]
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid slot ID format'}), 400
     
     # Get slots with their courses for ownership verification
-    slots = Slot.query.filter(Slot.id.in_(slot_ids)).all()
+    slots = Slot.query.filter(Slot.id.in_(resolved_slot_ids)).all()
     
     if len(slots) != len(slot_ids):
         return jsonify({'error': 'Some slots not found'}), 404
@@ -476,7 +513,18 @@ def get_preview_details():
     if not slot_ids:
         return jsonify({'slots': []})
         
-    # Convert to ints
+    # Check if we have hydrated slots (resilient format)
+    if isinstance(slot_ids[0], dict):
+        total_credits = sum([s.get('credits', 0) for s in slot_ids])
+        return jsonify({
+            'suggestion': {
+                'slots': slot_ids,
+                'total_credits': total_credits,
+                'details': {'teacher_match_count': 0}
+            }
+        })
+        
+    # Convert to ints for old format
     try:
         slot_ids = [int(sid) for sid in slot_ids]
     except:
@@ -538,7 +586,13 @@ def save_timetable():
     try:
         import json
         # Sort IDs to ensure canonical representation for duplicate check
-        slot_ids.sort()
+        if slot_ids and isinstance(slot_ids[0], dict):
+            # Sort dictionaries by slot_code to ensure consistent ordering
+            slot_ids.sort(key=lambda x: str(x.get('slot_code', '')))
+        else:
+            # Sort strings or integers
+            slot_ids.sort(key=str)
+        
         slot_ids_json = json.dumps(slot_ids)
         
         # Check for duplicates

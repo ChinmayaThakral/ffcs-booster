@@ -63,6 +63,43 @@ def parse_html_file():
     except Exception as e:
         return jsonify({'error': f'Error parsing file: {str(e)}'}), 500
 
+@upload_bp.route('/parse-batch', methods=['POST'])
+def parse_html_batch():
+    """
+    Parse uploaded HTML files in batch and extract course/slot information.
+    """
+    files = request.files.getlist('files[]')
+    
+    if not files:
+        return jsonify({'error': 'No files provided'}), 400
+    
+    results = []
+    for file in files:
+        if file.filename == '':
+            continue
+            
+        if not file.filename.lower().endswith(('.html', '.htm', '.mhtml')):
+            results.append({'filename': file.filename, 'status': 'error', 'error': 'File must be HTML or MHTML'})
+            continue
+            
+        try:
+            html_content = file.read().decode('utf-8')
+            parsed = parse_vtop_html(html_content)
+            
+            if not parsed['course']:
+                results.append({'filename': file.filename, 'status': 'error', 'error': 'Could not parse course info'})
+            else:
+                results.append({
+                    'filename': file.filename,
+                    'status': 'success',
+                    'course': parsed['course'],
+                    'slot_count': len(parsed['slots'])
+                })
+        except Exception as e:
+            results.append({'filename': file.filename, 'status': 'error', 'error': str(e)})
+
+    return jsonify({'results': results})
+
 @upload_bp.route('/import', methods=['POST'])
 def import_html_file():
     """
