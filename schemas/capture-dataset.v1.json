@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChinmayaThakral/ffcs-booster/schemas/capture-dataset.v1.json",
+  "title": "CaptureDataset",
+  "description": "Course/option data captured from the FFCS registration portal, exchanged between the browser extension and the backend.",
+  "type": "object",
+  "required": ["schemaVersion", "campus", "semesterLabel", "capturedAt", "courses"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "campus": { "type": "string", "minLength": 1 },
+    "semesterLabel": { "type": "string", "minLength": 1 },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "sourceUrl": { "type": "string" },
+    "courses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/course" }
+    }
+  },
+  "$defs": {
+    "course": {
+      "type": "object",
+      "required": ["code", "title", "options"],
+      "additionalProperties": true,
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z0-9]{4,12}$" },
+        "title": { "type": "string", "minLength": 1 },
+        "courseType": { "type": "string" },
+        "credits": { "type": "integer", "minimum": 0, "maximum": 30 },
+        "category": { "type": "string" },
+        "slotless": { "type": "boolean", "default": false },
+        "ltpjc": {
+          "type": "object",
+          "properties": {
+            "l": { "type": "integer", "minimum": 0 },
+            "t": { "type": "integer", "minimum": 0 },
+            "p": { "type": "integer", "minimum": 0 },
+            "j": { "type": "integer", "minimum": 0 },
+            "c": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/option" }
+        }
+      }
+    },
+    "option": {
+      "type": "object",
+      "required": ["rawSlotText", "venue", "faculty", "seats"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "slotCombo": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z]{1,3}\\d{1,2}$" }
+        },
+        "rawSlotText": { "type": "string", "minLength": 1 },
+        "venue": { "type": "string" },
+        "faculty": { "type": "string", "minLength": 1 },
+        "seats": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "const": "Full" }
+          ]
+        },
+        "totalSeats": { "type": "integer", "minimum": 0 },
+        "slotStatus": { "type": "string" },
+        "capturedAt": { "type": "string", "format": "date-time" },
+        "unknownSlots": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

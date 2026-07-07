@@ -1,6 +1,6 @@
 from flask import Flask
 from models import db
-from routes import main_bp, courses_bp, registration_bp, upload_bp, auth_bp, sitemap_bp, generate_bp, admin_bp
+from routes import main_bp, courses_bp, registration_bp, upload_bp, auth_bp, sitemap_bp, generate_bp, admin_bp, api_bp
 
 from routes.feedback import feedback_bp
 from routes.rating import rating_bp
@@ -30,6 +30,7 @@ app.register_blueprint(courses_bp, url_prefix='/api/courses')
 app.register_blueprint(registration_bp, url_prefix='/api/registration')
 app.register_blueprint(upload_bp, url_prefix='/api/upload')
 app.register_blueprint(generate_bp, url_prefix='/api/generate')
+app.register_blueprint(api_bp, url_prefix='/api')
 app.register_blueprint(feedback_bp)
 app.register_blueprint(rating_bp)
 app.register_blueprint(sitemap_bp)

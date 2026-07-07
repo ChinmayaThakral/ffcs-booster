@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, session, Response
 from models import db, Course, Faculty, Slot
 from utils.html_parser import parse_vtop_html
 from utils.csv_parser import parse_course_csv
+from utils.ingest import save_course_data
 
 upload_bp = Blueprint('upload', __name__)
 
@@ -176,92 +177,11 @@ def _process_single_file_import(file, user_id, guest_id):
         
         if not parsed['course']:
             return {'filename': file.filename, 'status': 'error', 'message': 'Could not parse course info'}
-        
-        course_data = parsed['course']
-        print(f"DEBUG: Parsed course: {course_data}")
-        print(f"DEBUG: Parsed slots count: {len(parsed['slots'])}")
-        
-        # Check if course already exists FOR THIS USER
-        # Use upper case to ensure consistency
-        code_upper = course_data['code'].upper()
-        query = Course.query.filter_by(code=code_upper)
-        if user_id:
-            query = query.filter_by(user_id=user_id)
-        else:
-            query = query.filter_by(guest_id=guest_id)
-            
-        course = query.first()
-        
-        # Start Transaction for this file
-        if not course:
-            course = Course(
-                code=code_upper,
-                name=course_data['name'],
-                l=course_data['l'],
-                t=course_data['t'],
-                p=course_data['p'],
-                j=course_data['j'],
-                c=course_data['c'],
-                course_type=course_data['course_type'],
-                category=course_data['category'],
-                user_id=user_id,
-                guest_id=guest_id
-            )
-            db.session.add(course)
-            db.session.flush()
-        
-        # --- Batch Process Faculties ---
-        faculty_names = set(s['faculty'] for s in parsed['slots'] if s['faculty'])
-        
-        # Note: In a batch loop, re-querying faculties every time is safe.
-        existing_faculties = Faculty.query.filter(Faculty.name.in_(faculty_names)).all()
-        faculty_map = {f.name: f for f in existing_faculties}
-        
-        missing_names = faculty_names - set(faculty_map.keys())
-        if missing_names:
-            new_facs = []
-            for name in missing_names:
-                f = Faculty(name=name)
-                new_facs.append(f)
-            
-            db.session.add_all(new_facs)
-            db.session.flush()
-            
-            for f in new_facs:
-                faculty_map[f.name] = f
 
-        # --- Batch Process Slots ---
-        existing_slots = Slot.query.filter_by(course_id=course.id).all()
-        existing_slot_signatures = {(s.slot_code, s.venue) for s in existing_slots}
-        print(f"DEBUG: Existing slot signatures: {existing_slot_signatures}")
-        
-        slots_to_add = []
-        for slot_data in parsed['slots']:
-            signature = (slot_data['slot_code'], slot_data['venue'])
-            print(f"DEBUG: Checking slot signature: {signature}")
-            
-            if signature not in existing_slot_signatures:
-                faculty = faculty_map.get(slot_data['faculty'])
-                new_slot = Slot(
-                    slot_code=slot_data['slot_code'],
-                    course_id=course.id,
-                    faculty_id=faculty.id if faculty else None,
-                    venue=slot_data['venue'],
-                    available_seats=slot_data['available_seats'],
-                    total_seats=70,
-                    class_nbr=slot_data.get('class_nbr')
-                )
-                slots_to_add.append(new_slot)
-                existing_slot_signatures.add(signature)
-        
-        if slots_to_add:
-            db.session.add_all(slots_to_add)
-            slots_added = len(slots_to_add)
-        else:
-            slots_added = 0
-        
-        print(f"DEBUG: Slots to add: {slots_added}")
-        
+        course_data = parsed['course']
+
+        course, slots_added = save_course_data(course_data, parsed['slots'], user_id, guest_id)
+
         # Commit per file to avoid huge transactions and ensure partial batch success
         db.session.commit()
         
