@@ -28,6 +28,15 @@ A high-performance, automated timetable planner designed specifically for VIT Bh
 - **AI/OCR Import**: Use AI to extract the data automatically from screenshots.
 - **Manual Entry**: flexible form for single course additions.
 
+## 🧩 Browser Extension (FFCS Booster)
+
+The `extension/` folder contains a Chrome (MV3) extension that replaces the manual "save page as HTML and upload" step: while you browse the FFCS portal, it passively captures every course, faculty option, slot combo, venue and seat count you open, and shows a checklist of what's still left to view.
+
+- **Read-only by design**: it never clicks Register/Modify/Delete, never auto-registers, and never touches your credentials or cookies. You register manually on the portal as always.
+- **Local-first**: captured data stays in your browser (`chrome.storage.local`). Export it as JSON, copy it, or explicitly send it to the web app via `POST /api/capture`.
+- Build: `cd extension && npm install && npm run build`, then load `extension/.output/chrome-mv3` via `chrome://extensions` → "Load unpacked".
+- Tests: `npm test` (parsers run against real saved portal pages from `courses/`).
+
 ## 🌟 Core Features
 
 - **Automated Clash Detection**: Instantly checks if a new course conflicts with your existing schedule (Parallel Processing).
