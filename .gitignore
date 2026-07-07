@@ -1,6 +1,23 @@
 .env
 __pycache__/
 venv/
+.venv/
 *.pyc
 *.pyo
 *.pyd
+
+# Local databases & backups
+*.db
+*.bak
+instance/
+
+# Node / extension build output
+node_modules/
+extension/.output/
+extension/.wxt/
+extension/dist/
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
