@@ -81,7 +81,13 @@ This project has been heavily optimized for "F1-level" speed:
     SECRET_KEY="your-flask-secret-key"
     ```
 
-4.  **Run the App**
+4.  **Initialize the Database** (optional)
+    Without a `DATABASE_URL`, the app falls back to a local SQLite file (`timetable.db`) and creates the tables automatically on first run. To reset it to a clean state at any point:
+    ```bash
+    python -m scripts.reset_db
+    ```
+
+5.  **Run the App**
     ```bash
     python app.py
     ```
