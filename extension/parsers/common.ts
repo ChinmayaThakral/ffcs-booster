@@ -37,6 +37,16 @@ export function headerIndex(ht: HeaderTable, needle: string): number {
   return ht.headers.findIndex((h) => h === needle || h.startsWith(needle));
 }
 
+/**
+ * Looser lookup: index of the first header CONTAINING the needle anywhere.
+ * Use for columns whose label varies across portal page layouts, e.g. a
+ * "General / Available" two-line header that normalizes to
+ * "general available" rather than the plainer "Available Seats".
+ */
+export function headerIndexContains(ht: HeaderTable, needle: string): number {
+  return ht.headers.findIndex((h) => h.includes(needle));
+}
+
 /** Data rows of a table: tr elements that contain td cells. */
 export function dataRows(table: HTMLTableElement): HTMLTableCellElement[][] {
   const rows: HTMLTableCellElement[][] = [];
