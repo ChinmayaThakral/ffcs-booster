@@ -35,6 +35,9 @@ class GenerationPreferences:
     avoided_faculties: List[str] = field(default_factory=list)
     exclude_slots: List[str] = field(default_factory=list)
 
+    # Seat safety: drop options with 0 available seats ("Full") before generating.
+    exclude_full_seats: bool = False
+
 
 @dataclass
 class TimetableSolution:
@@ -214,16 +217,20 @@ class TimetableGenerator:
         # Check avoided faculty
         if slot.faculty and slot.faculty.name in self.preferences.avoided_faculties:
             return True
-        
+
+        # Check seat safety (0 available seats == "Full" on the portal)
+        if self.preferences.exclude_full_seats and slot.available_seats <= 0:
+            return True
+
         # Check excluded slot codes
         individual_slots = slot.get_individual_slots()
         for s in individual_slots:
             if s in self.preferences.exclude_slots:
                 return True
-                
+
             # Check Time Constraints
             # (Removed early/late specific checks)
-        
+
         return False
 
     def _is_slot_faulty(self, slot: Slot) -> bool:
