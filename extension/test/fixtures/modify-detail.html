@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<!--
+  Synthetic reproduction of the "Modify Slot" detail page (reached via the
+  Modify button on a registered course), built from a real captured screenshot
+  2026-07-08. Distinct from the original "View Slots" fixtures in two ways
+  that broke parsing before this fixture existed:
+    1. The course-info table has only 3 columns (no L/T/P/J/Credit at all).
+    2. The seats column header is "General" / "Available" stacked in one
+       <th> via <br>, not a plain "Available Seats" column.
+-->
+<body>
+  <table class="w3-table-all">
+    <thead>
+      <tr class="w3-blue">
+        <th>Course Code</th>
+        <th>Course Title</th>
+        <th>Course Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>CSE3006</td>
+        <td>Computer Networks</td>
+        <td>LTP</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table class="w3-table-all">
+    <thead>
+      <tr class="w3-blue">
+        <th>Slot</th>
+        <th>Venue</th>
+        <th>Faculty</th>
+        <th>Clash Status<br>(i.e. with Registered Slots)</th>
+        <th>General<br>Available</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>A11+A12+A13</td><td>AB02-404</td><td>SHAHANA GAJALA QURESHI</td><td><span style="color:green">NONE</span></td><td><input type="radio" name="slot"> 4</td></tr>
+      <tr><td>A14+D11+D12</td><td>AB02-306</td><td>ABDUL RAHMAN</td><td><span style="color:red">Clashed with A14/ D11/ D12</span></td><td>0</td></tr>
+      <tr><td>A21+A22+A23</td><td>AR-202</td><td>PRAVEEN KUMAR TYAGI</td><td><span style="color:red">Clashed with A21/ A22/ A23</span></td><td>0</td></tr>
+      <tr><td>A21+A22+A23</td><td>LC-002</td><td>SREEVANI MADDUKURI</td><td><span style="color:red">Clashed with A21/ A22/ A23</span></td><td><input type="radio" name="slot"> 45</td></tr>
+      <tr><td>A24+E21+F22</td><td>AB02-401</td><td>NAROTTAM DAS PATEL</td><td><span style="color:green">NONE</span></td><td><input type="radio" name="slot"> 1</td></tr>
+      <tr><td>B11+B12+B13</td><td>AB02-409</td><td>S. PERIYANAYAGI</td><td><span style="color:green">NONE</span></td><td>0</td></tr>
+      <tr><td>B14+B23+D21</td><td>AB02-402</td><td>S. PERIYANAYAGI</td><td><span style="color:green">NONE</span></td><td><input type="radio" name="slot"> 9</td></tr>
+      <tr><td>B21+E14+E22</td><td>AB02-409</td><td>PAVITHRA R</td><td><span style="color:green">NONE</span></td><td>0</td></tr>
+      <tr><td>B22+B24+F21</td><td>AB02-401</td><td>NAROTTAM DAS PATEL</td><td><span style="color:green">NONE</span></td><td><input type="radio" name="slot"> 20</td></tr>
+      <tr><td>C11+C12+C13</td><td>AB02-403</td><td>SHAHANA GAJALA QURESHI</td><td><span style="color:red">Similar to Registered Slot</span></td><td>0</td></tr>
+      <tr><td>C11+C12+C13</td><td>AR-103</td><td>BUBAI MANNA</td><td><span style="color:red">Registered Slot</span></td><td><input type="radio" name="slot" checked> 2</td></tr>
+      <tr><td>C14+E11+E12</td><td>AB02-423</td><td>PAVITHRA R</td><td><span style="color:red">Clashed with C14/ E11/ E12</span></td><td>0</td></tr>
+      <tr><td>C14+E11+E12</td><td>AR-202</td><td>PRAVEEN KUMAR TYAGI</td><td><span style="color:red">Clashed with C14/ E11/ E12</span></td><td><input type="radio" name="slot"> 1</td></tr>
+      <tr><td>C14+E11+E12</td><td>LC-002</td><td>SREEVANI MADDUKURI</td><td><span style="color:red">Clashed with C14/ E11/ E12</span></td><td><input type="radio" name="slot"> 1</td></tr>
+      <tr><td>C14+E11+E12</td><td>AB02-301</td><td>MONICA SANKAT</td><td><span style="color:red">Clashed with C14/ E11/ E12</span></td><td>0</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>
