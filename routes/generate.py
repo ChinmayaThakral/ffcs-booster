@@ -154,7 +154,8 @@ def count_timetables():
         avoided_faculties=pref_data.get('avoided_faculties', []),
         exclude_slots=pref_data.get('exclude_slots', []),
         time_mode=pref_data.get('time_mode', 'none'),
-        course_faculty_preferences=pref_data.get('course_faculty_preferences', {})
+        course_faculty_preferences=pref_data.get('course_faculty_preferences', {}),
+        exclude_full_seats=pref_data.get('exclude_full_seats', False)
     )
     
     # Count solutions
@@ -271,7 +272,8 @@ def suggest_timetable():
         avoided_faculties=pref_data.get('avoided_faculties', []),
         exclude_slots=pref_data.get('exclude_slots', []),
         time_mode=pref_data.get('time_mode', 'none'),
-        course_faculty_preferences=pref_data.get('course_faculty_preferences', {})
+        course_faculty_preferences=pref_data.get('course_faculty_preferences', {}),
+        exclude_full_seats=pref_data.get('exclude_full_seats', False)
     )
     
     
@@ -310,6 +312,92 @@ def suggest_timetable():
         'warnings': generator.warnings
     })
 
+
+
+@generate_bp.route('/all', methods=['POST'])
+def generate_all():
+    """
+    Exhaustively enumerate every valid, clash-free timetable combination.
+    Unlike /suggest (which ranks a random sample), this backtracks through
+    every course/option combination, so the result set is complete up to
+    max_solutions. Seat-safety is on by default: options with 0 available
+    seats ("Full" on the portal) are excluded before enumerating.
+
+    Request body:
+    {
+        "course_ids": ["1", "2", "3"],
+        "preferences": {...},        # same shape as /suggest
+        "max_solutions": 20000,      # backtracking safety cap
+        "limit": 1000                # how many (best-first) to return
+    }
+    """
+    user_id, guest_id = get_user_scope()
+
+    if not user_id and not guest_id:
+        return jsonify({'error': 'No active session'}), 401
+
+    data = request.get_json() or {}
+    course_ids = data.get('course_ids', [])
+    pref_data = data.get('preferences', {})
+
+    if not course_ids:
+        return jsonify({'error': 'No courses selected'}), 400
+
+    try:
+        course_ids = [int(cid) for cid in course_ids]
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid course ID format'}), 400
+
+    if user_id:
+        courses = Course.query.filter(
+            Course.id.in_(course_ids),
+            Course.user_id == user_id
+        ).all()
+    else:
+        courses = Course.query.filter(
+            Course.id.in_(course_ids),
+            Course.guest_id == guest_id
+        ).all()
+
+    if not courses:
+        return jsonify({'error': 'No valid courses found'}), 404
+
+    preferences = GenerationPreferences(
+        avoid_early_morning=pref_data.get('avoid_early_morning', False),
+        avoid_late_evening=pref_data.get('avoid_late_evening', False),
+        prefer_morning=pref_data.get('prefer_morning', False),
+        prefer_afternoon=pref_data.get('prefer_afternoon', False),
+        preferred_faculties=pref_data.get('preferred_faculties', []),
+        avoided_faculties=pref_data.get('avoided_faculties', []),
+        exclude_slots=pref_data.get('exclude_slots', []),
+        time_mode=pref_data.get('time_mode', 'none'),
+        course_faculty_preferences=pref_data.get('course_faculty_preferences', {}),
+        # Default True here (unlike the other endpoints): the whole point of
+        # this endpoint is seat-safe enumeration.
+        exclude_full_seats=pref_data.get('exclude_full_seats', True)
+    )
+
+    def clamp(value, default, lo, hi):
+        try:
+            return max(lo, min(int(value), hi))
+        except (ValueError, TypeError):
+            return default
+
+    max_solutions = clamp(data.get('max_solutions', 20000), 20000, 1, 20000)
+    limit = clamp(data.get('limit', 1000), 1000, 1, 5000)
+
+    generator = TimetableGenerator(courses, preferences)
+    solutions = generator.generate_exhaustive(max_solutions=max_solutions, target_size=limit)
+    total_enumerated = solutions[0].details.get('total_enumerated', len(solutions)) if solutions else 0
+
+    return jsonify({
+        'success': True,
+        'suggestions': [s.to_dict() for s in solutions],
+        'count': len(solutions),
+        'total_enumerated': total_enumerated,
+        'capped': total_enumerated >= max_solutions,
+        'warnings': generator.warnings
+    })
 
 
 @generate_bp.route('/more', methods=['POST'])
@@ -370,7 +458,8 @@ def generate_more():
         avoided_faculties=pref_data.get('avoided_faculties', []),
         exclude_slots=pref_data.get('exclude_slots', []),
         time_mode=pref_data.get('time_mode', 'none'),
-        course_faculty_preferences=pref_data.get('course_faculty_preferences', {})
+        course_faculty_preferences=pref_data.get('course_faculty_preferences', {}),
+        exclude_full_seats=pref_data.get('exclude_full_seats', False)
     )
     
     # Generate more solutions
