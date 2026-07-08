@@ -6,7 +6,7 @@
 
 import type { CaptureCourse, CaptureOption } from '../lib/schema';
 import { optionId, parseSeats, parseSlotCombo } from '../lib/slots';
-import { cellText, dataRows, hasHeaders, headerIndex, tablesWithHeaders, type HeaderTable } from './common';
+import { cellText, dataRows, hasHeaders, headerIndex, headerIndexContains, tablesWithHeaders, type HeaderTable } from './common';
 
 function exactIndex(ht: HeaderTable, name: string): number {
   return ht.headers.indexOf(name);
@@ -34,7 +34,10 @@ export function parseViewSlotsPage(doc: Document): CaptureCourse | null {
   const tIdx = exactIndex(courseTable, 't');
   const pIdx = exactIndex(courseTable, 'p');
   const jIdx = exactIndex(courseTable, 'j');
-  const cIdx = exactIndex(courseTable, 'c');
+  // Some layouts spell this column "Credit"/"Credits" instead of "C".
+  const cIdx = exactIndex(courseTable, 'c') >= 0
+    ? exactIndex(courseTable, 'c')
+    : headerIndexContains(courseTable, 'credit');
 
   let course: CaptureCourse | null = null;
 
@@ -73,9 +76,13 @@ export function parseViewSlotsPage(doc: Document): CaptureCourse | null {
   const slotIdx = headerIndex(optionsTable, 'slot');
   const venueIdx = headerIndex(optionsTable, 'venue');
   const facultyIdx = headerIndex(optionsTable, 'faculty');
-  const availIdx = headerIndex(optionsTable, 'available seats');
-  const totalIdx = headerIndex(optionsTable, 'total seats');
-  const statusIdx = headerIndex(optionsTable, 'slot status');
+  // "available"/"total"/"status" instead of headerIndex's exact prefix match:
+  // some page layouts (e.g. the Modify Slot page) nest the label under a
+  // group header like "General / Available", which normalizes to a string
+  // that doesn't start with "available seats" but does contain "available".
+  const availIdx = headerIndexContains(optionsTable, 'available');
+  const totalIdx = headerIndexContains(optionsTable, 'total');
+  const statusIdx = headerIndexContains(optionsTable, 'status');
   const typeIdx = headerIndex(optionsTable, 'course type');
 
   const now = new Date().toISOString();

@@ -61,3 +61,40 @@ describe('view-slots page parser (real VTOP fixtures)', () => {
     expect(detectCourseListPage(loadFixture('CSA3006.html'))).toBe(false);
   });
 });
+
+describe('view-slots page parser (Modify Slot detail page layout)', () => {
+  it('detects the Modify page as a view-slots page', () => {
+    expect(detectViewSlotsPage(loadFixture('modify-detail.html'))).toBe(true);
+  });
+
+  it('reads real seat counts from the "General / Available" nested header, not always Full', () => {
+    const course = parseViewSlotsPage(loadFixture('modify-detail.html'));
+    expect(course).not.toBeNull();
+    expect(course!.code).toBe('CSE3006');
+    expect(course!.options).toHaveLength(15);
+
+    // venue alone isn't unique here (e.g. LC-002 hosts two different slot combos),
+    // just like the real page — key by slot+venue instead.
+    const byKey = Object.fromEntries(course!.options.map((o) => [`${o.rawSlotText}@${o.venue}`, o]));
+    expect(byKey['A11+A12+A13@AB02-404'].seats).toBe(4);
+    expect(byKey['A21+A22+A23@LC-002'].seats).toBe(45);
+    expect(byKey['B14+B23+D21@AB02-402'].seats).toBe(9);
+    expect(byKey['C11+C12+C13@AR-103'].seats).toBe(2);
+    // genuinely full/zero rows stay zero — the fix must not flip everything to non-zero either
+    expect(byKey['A14+D11+D12@AB02-306'].seats).toBe(0);
+    expect(byKey['B21+E14+E22@AB02-409'].seats).toBe(0);
+  });
+
+  it('reads the clash status text via the loose "status" header match', () => {
+    const course = parseViewSlotsPage(loadFixture('modify-detail.html'))!;
+    const registered = course.options.find((o) => o.venue === 'AR-103')!;
+    expect(registered.slotStatus).toBe('Registered Slot');
+    const clashed = course.options.find((o) => o.rawSlotText === 'A14+D11+D12')!;
+    expect(clashed.slotStatus).toContain('Clashed with');
+  });
+
+  it('does not have credits (this page layout genuinely omits them)', () => {
+    const course = parseViewSlotsPage(loadFixture('modify-detail.html'))!;
+    expect(course.credits).toBe(0);
+  });
+});
