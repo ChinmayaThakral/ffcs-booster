@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FFCS Booster — Seat-Safe Combinations</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1rem; color: #555; margin-top: 2rem; }
+  .courses { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+  .course-chip { border: 1px solid #ccc; border-radius: 6px; padding: .4rem .7rem; cursor: pointer; user-select: none; }
+  .course-chip.selected { background: #16a34a; color: white; border-color: #16a34a; }
+  .course-chip.no-options { opacity: .4; cursor: not-allowed; }
+  label.toggle { display: block; margin: .75rem 0; }
+  button { background: #16a34a; color: white; border: none; padding: .6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  button:disabled { background: #999; cursor: not-allowed; }
+  #summary { margin: 1rem 0; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border: 1px solid #ddd; padding: .4rem .6rem; text-align: left; font-size: .85rem; }
+  th { background: #f3f4f6; }
+  .warning { background: #fff7ed; border: 1px solid #fdba74; padding: .6rem; border-radius: 6px; margin: 1rem 0; font-size: .85rem; }
+</style>
+</head>
+<body>
+  <h1>FFCS Booster — Seat-Safe Combinations</h1>
+  <p>Loads courses captured for the current session and enumerates every clash-free timetable combination via <code>POST /api/generate/all</code>.</p>
+
+  <h2>1. Pick courses</h2>
+  <div id="courses" class="courses">Loading…</div>
+
+  <label class="toggle">
+    <input type="checkbox" id="excludeFull" checked>
+    Exclude options with 0 available seats (seat-safe mode)
+  </label>
+
+  <button id="generateBtn" disabled>Generate all combinations</button>
+
+  <div id="summary"></div>
+  <div id="warnings"></div>
+  <div id="results"></div>
+
+<script>
+  const coursesEl = document.getElementById('courses');
+  const generateBtn = document.getElementById('generateBtn');
+  const excludeFullEl = document.getElementById('excludeFull');
+  const summaryEl = document.getElementById('summary');
+  const warningsEl = document.getElementById('warnings');
+  const resultsEl = document.getElementById('results');
+
+  const selected = new Set();
+  let courses = [];
+
+  async function loadCourses() {
+    const res = await fetch('/api/generate/available');
+    const data = await res.json();
+    courses = data.courses || [];
+
+    if (courses.length === 0) {
+      coursesEl.textContent = 'No captured courses found for this session. Send data from the extension first, in this same browser.';
+      return;
+    }
+
+    coursesEl.innerHTML = '';
+    for (const c of courses) {
+      const chip = document.createElement('div');
+      const hasOptions = c.slot_count > 0;
+      chip.className = 'course-chip' + (hasOptions ? '' : ' no-options');
+      chip.textContent = `${c.code} (${c.slot_count} options)`;
+      chip.title = hasOptions ? '' : 'No captured options for this course — open its View page first';
+      if (hasOptions) {
+        chip.onclick = () => {
+          if (selected.has(c.id)) { selected.delete(c.id); chip.classList.remove('selected'); }
+          else { selected.add(c.id); chip.classList.add('selected'); }
+          generateBtn.disabled = selected.size === 0;
+        };
+      }
+      coursesEl.appendChild(chip);
+    }
+  }
+
+  generateBtn.onclick = async () => {
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Generating…';
+    summaryEl.textContent = '';
+    warningsEl.innerHTML = '';
+    resultsEl.innerHTML = '';
+
+    try {
+      const res = await fetch('/api/generate/all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          course_ids: Array.from(selected),
+          preferences: { exclude_full_seats: excludeFullEl.checked },
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        summaryEl.textContent = `Error: ${data.error || res.status}`;
+        return;
+      }
+
+      summaryEl.textContent =
+        `${data.total_enumerated} valid combination(s) found` +
+        (data.capped ? ` (capped, showing top ${data.count})` : `, showing ${data.count}`);
+
+      if (data.warnings && data.warnings.length > 0) {
+        warningsEl.innerHTML = `<div class="warning"><b>Warnings:</b><br>${data.warnings.map(w => w.replace(/</g, '&lt;')).join('<br>')}</div>`;
+      }
+
+      if (data.suggestions.length === 0) {
+        resultsEl.textContent = excludeFullEl.checked
+          ? 'No combination has open seats in every course — try unchecking seat-safe mode to see all clash-free combinations regardless of seats.'
+          : 'No clash-free combination exists for the selected courses.';
+        return;
+      }
+
+      const table = document.createElement('table');
+      table.innerHTML = '<tr><th>#</th><th>Credits</th><th>Slots (course · slot · faculty · venue)</th></tr>';
+      data.suggestions.forEach((s, i) => {
+        const row = document.createElement('tr');
+        const slotsText = s.slots.map(x => `${x.course_code} · ${x.slot_code} · ${x.faculty_name || 'TBA'} · ${x.venue}`).join('<br>');
+        row.innerHTML = `<td>${i + 1}</td><td>${s.total_credits}</td><td>${slotsText}</td>`;
+        table.appendChild(row);
+      });
+      resultsEl.appendChild(table);
+    } catch (e) {
+      summaryEl.textContent = 'Could not reach the backend: ' + e;
+    } finally {
+      generateBtn.disabled = selected.size === 0;
+      generateBtn.textContent = 'Generate all combinations';
+    }
+  };
+
+  loadCourses();
+</script>
+</body>
+</html>

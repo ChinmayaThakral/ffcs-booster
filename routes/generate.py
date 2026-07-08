@@ -22,6 +22,17 @@ def generate_page():
     return render_template('generate.html', current_user=current_user)
 
 
+@generate_bp.route('/all-page')
+def generate_all_page():
+    """
+    Standalone viewer for POST /api/generate/all — a lightweight stopgap
+    until the seat-safe exhaustive endpoint gets a proper results UI.
+    Uses the caller's existing session, so it shows whatever courses were
+    captured for the current guest/user scope (e.g. via the extension).
+    """
+    return render_template('seat_safe_results.html')
+
+
 def get_user_scope():
     """Get current user/guest scope for queries."""
     user_id = session.get('user_id')
