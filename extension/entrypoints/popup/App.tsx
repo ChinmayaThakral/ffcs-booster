@@ -5,10 +5,13 @@ import {
   buildDataset,
   clearSemester,
   courseStatus,
+  excludeCourse,
   getActiveSemesterLabel,
   getParseIssues,
   getSettings,
   loadSemester,
+  restoreCourse,
+  saveSemester,
   saveSettings,
   type CourseStatus,
   type SemesterState,
@@ -133,6 +136,27 @@ export default function App() {
     flash('Cleared');
   };
 
+  const removeCourse = async (code: string, title: string) => {
+    if (!state) return;
+    if (!confirm(`Remove ${code} — ${title}?\n\nIt won't be re-captured even if you open its page again, until you restore it.`)) {
+      return;
+    }
+    const next = excludeCourse(state, code);
+    await saveSemester(next);
+    setState(next);
+    flash(`Removed ${code}`);
+  };
+
+  const restoreExcluded = async (code: string) => {
+    if (!state) return;
+    const next = restoreCourse(state, code);
+    await saveSemester(next);
+    setState(next);
+    flash(`Restored ${code} — reopen its page to re-capture`);
+  };
+
+  const excludedList = useMemo(() => (state ? Object.values(state.excluded) : []), [state]);
+
   return (
     <div className="p-4 font-sans text-sm text-gray-900">
       <header className="mb-3 flex items-center justify-between">
@@ -165,10 +189,40 @@ export default function App() {
                   <span className={`text-xs ${meta.cls}`}>
                     {row.optionCount > 0 ? `${row.optionCount} options` : meta.label}
                   </span>
+                  <button
+                    onClick={() => void removeCourse(row.code, row.title)}
+                    title="Remove — opened by mistake"
+                    className="shrink-0 rounded px-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
                 </li>
               );
             })}
           </ul>
+
+          {excludedList.length > 0 && (
+            <div className="mb-3">
+              <div className="mb-1 text-xs font-medium text-gray-500">
+                Removed ({excludedList.length}) — won't be re-captured
+              </div>
+              <ul className="max-h-24 divide-y divide-gray-100 overflow-y-auto rounded border border-gray-200 bg-gray-50">
+                {excludedList.map((ex) => (
+                  <li key={ex.code} className="flex items-center justify-between gap-2 px-2 py-1 text-xs">
+                    <span className="min-w-0 flex-1 truncate text-gray-500">
+                      {ex.code} — {ex.title}
+                    </span>
+                    <button
+                      onClick={() => void restoreExcluded(ex.code)}
+                      className="shrink-0 font-medium text-blue-600 hover:underline"
+                    >
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       ) : (
         <p className="mb-3 rounded bg-gray-50 p-3 text-xs text-gray-600">
