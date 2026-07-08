@@ -4,21 +4,35 @@
 <meta charset="UTF-8">
 <title>FFCS Booster — Seat-Safe Combinations</title>
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  body { font-family: -apple-system, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
   h1 { font-size: 1.4rem; }
   h2 { font-size: 1rem; color: #555; margin-top: 2rem; }
-  .courses { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+  .courses { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; align-items: center; }
   .course-chip { border: 1px solid #ccc; border-radius: 6px; padding: .4rem .7rem; cursor: pointer; user-select: none; }
   .course-chip.selected { background: #16a34a; color: white; border-color: #16a34a; }
   .course-chip.no-options { opacity: .4; cursor: not-allowed; }
+  .link-btn { background: none; border: none; color: #2563eb; cursor: pointer; font-size: .85rem; padding: 0; }
   label.toggle { display: block; margin: .75rem 0; }
-  button { background: #16a34a; color: white; border: none; padding: .6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; }
-  button:disabled { background: #999; cursor: not-allowed; }
+  button.primary { background: #16a34a; color: white; border: none; padding: .6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  button.primary:disabled { background: #999; cursor: not-allowed; }
   #summary { margin: 1rem 0; font-weight: 600; }
-  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-  th, td { border: 1px solid #ddd; padding: .4rem .6rem; text-align: left; font-size: .85rem; }
-  th { background: #f3f4f6; }
   .warning { background: #fff7ed; border: 1px solid #fdba74; padding: .6rem; border-radius: 6px; margin: 1rem 0; font-size: .85rem; }
+
+  .solution { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem; }
+  .solution-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .6rem; font-size: .9rem; color: #444; }
+  .solution-header b { color: #1a1a1a; }
+
+  table.grid { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  table.grid th, table.grid td { border: 1px solid #c7c2f5; padding: .35rem; text-align: center; font-size: .72rem; }
+  table.grid th { background: #ede9fe; font-weight: 600; }
+  table.grid td.day-label { background: #ede9fe; font-weight: 600; width: 3.5rem; }
+  table.grid td.lunch { background: #f3f1fb; font-weight: 600; color: #7c3aed; }
+  table.grid td.filled { background: #dcfce7; font-weight: 600; }
+  table.grid .code { display: block; }
+  table.grid .course { display: block; font-size: .62rem; color: #555; }
+
+  .legend { margin-top: .6rem; font-size: .78rem; color: #444; }
+  .legend div { padding: .1rem 0; }
 </style>
 </head>
 <body>
@@ -27,22 +41,45 @@
 
   <h2>1. Pick courses</h2>
   <div id="courses" class="courses">Loading…</div>
+  <button class="link-btn" id="selectAllBtn">Select all</button>
 
   <label class="toggle">
     <input type="checkbox" id="excludeFull" checked>
     Exclude options with 0 available seats (seat-safe mode)
   </label>
+  <label class="toggle">
+    <input type="checkbox" id="noGaps" checked>
+    Prioritize timetables with the fewest gaps between classes (0 = perfectly back-to-back every day; not always achievable, so the closest ones are shown first)
+  </label>
 
-  <button id="generateBtn" disabled>Generate all combinations</button>
+  <button class="primary" id="generateBtn" disabled>Generate all combinations</button>
 
   <div id="summary"></div>
   <div id="warnings"></div>
   <div id="results"></div>
 
 <script>
+  const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const PERIOD_LABELS = [
+    ['08:30', '10:00'], ['10:05', '11:35'], ['11:40', '13:10'], ['LUNCH', ''],
+    ['13:15', '14:45'], ['14:50', '16:20'], ['16:25', '17:55'], ['18:00', '19:30'],
+  ];
+  // day, grid-column (period 4 == lunch column, so periods 4-7 shift to columns 5-8)
+  const SLOT_TIMINGS = {
+    A11: ['MON', 1], B11: ['MON', 2], C11: ['MON', 3], A21: ['MON', 4], A14: ['MON', 5], B21: ['MON', 6], C21: ['MON', 7],
+    D11: ['TUE', 1], E11: ['TUE', 2], F11: ['TUE', 3], D21: ['TUE', 4], E14: ['TUE', 5], E21: ['TUE', 6], F21: ['TUE', 7],
+    A12: ['WED', 1], B12: ['WED', 2], C12: ['WED', 3], A22: ['WED', 4], B14: ['WED', 5], B22: ['WED', 6], A24: ['WED', 7],
+    D12: ['THU', 1], E12: ['THU', 2], F12: ['THU', 3], D22: ['THU', 4], F14: ['THU', 5], E22: ['THU', 6], F22: ['THU', 7],
+    A13: ['FRI', 1], B13: ['FRI', 2], C13: ['FRI', 3], A23: ['FRI', 4], C14: ['FRI', 5], B23: ['FRI', 6], B24: ['FRI', 7],
+    D13: ['SAT', 1], E13: ['SAT', 2], F13: ['SAT', 3], D23: ['SAT', 4], D14: ['SAT', 5], D24: ['SAT', 6], E23: ['SAT', 7],
+  };
+  // period number (1-7) -> grid column index (0-7, with column 3 reserved for lunch)
+  const PERIOD_TO_COL = { 1: 0, 2: 1, 3: 2, 4: 4, 5: 5, 6: 6, 7: 7 };
+
   const coursesEl = document.getElementById('courses');
   const generateBtn = document.getElementById('generateBtn');
   const excludeFullEl = document.getElementById('excludeFull');
+  const noGapsEl = document.getElementById('noGaps');
   const summaryEl = document.getElementById('summary');
   const warningsEl = document.getElementById('warnings');
   const resultsEl = document.getElementById('results');
@@ -78,6 +115,69 @@
     }
   }
 
+  document.getElementById('selectAllBtn').onclick = () => {
+    selected.clear();
+    for (const c of courses) if (c.slot_count > 0) selected.add(c.id);
+    for (const chip of coursesEl.children) {
+      if (!chip.classList.contains('no-options')) chip.classList.add('selected');
+    }
+    generateBtn.disabled = selected.size === 0;
+  };
+
+  function buildGrid(solution) {
+    // 6 days x 8 columns (col 3 = lunch)
+    const grid = Array.from({ length: 6 }, () => Array(8).fill(null));
+    for (const day of DAYS) grid[DAYS.indexOf(day)][3] = { lunch: true };
+
+    for (const slot of solution.slots) {
+      for (const code of slot.slot_code.split(/[+/]/).map((s) => s.trim())) {
+        const timing = SLOT_TIMINGS[code];
+        if (!timing) continue;
+        const [day, period] = timing;
+        const row = DAYS.indexOf(day);
+        const col = PERIOD_TO_COL[period];
+        grid[row][col] = { code, course: slot.course_code };
+      }
+    }
+    return grid;
+  }
+
+  function renderGridTable(solution) {
+    const grid = buildGrid(solution);
+    const table = document.createElement('table');
+    table.className = 'grid';
+
+    const thead = document.createElement('tr');
+    thead.innerHTML = '<th>Day</th>' + PERIOD_LABELS.map((p) => `<th>${p[0]}${p[1] ? '<br>' + p[1] : ''}</th>`).join('');
+    table.appendChild(thead);
+
+    DAYS.forEach((day, row) => {
+      const tr = document.createElement('tr');
+      let html = `<td class="day-label">${day}</td>`;
+      for (let col = 0; col < 8; col++) {
+        const cell = grid[row][col];
+        if (col === 3) { html += '<td class="lunch">Lunch</td>'; continue; }
+        if (cell) {
+          html += `<td class="filled"><span class="code">${cell.code}</span><span class="course">${cell.course}</span></td>`;
+        } else {
+          html += '<td></td>';
+        }
+      }
+      tr.innerHTML = html;
+      table.appendChild(tr);
+    });
+    return table;
+  }
+
+  function renderLegend(solution) {
+    const div = document.createElement('div');
+    div.className = 'legend';
+    div.innerHTML = solution.slots
+      .map((x) => `<div><b>${x.course_code}</b> — ${x.slot_code} · ${x.faculty_name || 'TBA'} · ${x.venue}</div>`)
+      .join('');
+    return div;
+  }
+
   generateBtn.onclick = async () => {
     generateBtn.disabled = true;
     generateBtn.textContent = 'Generating…';
@@ -86,12 +186,17 @@
     resultsEl.innerHTML = '';
 
     try {
+      // When filtering to no-gap timetables, ask for more results so the
+      // client-side filter isn't just picking over the top-1000-by-score.
+      const limit = noGapsEl.checked ? 5000 : 1000;
+
       const res = await fetch('/api/generate/all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           course_ids: Array.from(selected),
           preferences: { exclude_full_seats: excludeFullEl.checked },
+          limit,
         }),
       });
       const data = await res.json();
@@ -101,30 +206,38 @@
         return;
       }
 
-      summaryEl.textContent =
-        `${data.total_enumerated} valid combination(s) found` +
-        (data.capped ? ` (capped, showing top ${data.count})` : `, showing ${data.count}`);
-
       if (data.warnings && data.warnings.length > 0) {
         warningsEl.innerHTML = `<div class="warning"><b>Warnings:</b><br>${data.warnings.map(w => w.replace(/</g, '&lt;')).join('<br>')}</div>`;
       }
 
-      if (data.suggestions.length === 0) {
+      let suggestions = data.suggestions;
+      let minGaps = null;
+      if (noGapsEl.checked && suggestions.length > 0) {
+        suggestions = [...suggestions].sort((a, b) => a.details.total_gaps - b.details.total_gaps);
+        minGaps = suggestions[0].details.total_gaps;
+      }
+
+      summaryEl.textContent =
+        `${data.total_enumerated} valid combination(s) found. Showing ${Math.min(suggestions.length, 30)}` +
+        (minGaps !== null ? `, sorted by fewest gaps (best: ${minGaps} gap${minGaps === 1 ? '' : 's'} per week)` : '') +
+        '.';
+
+      if (suggestions.length === 0) {
         resultsEl.textContent = excludeFullEl.checked
-          ? 'No combination has open seats in every course — try unchecking seat-safe mode to see all clash-free combinations regardless of seats.'
+          ? 'No combination has open seats in every course. If seats read as 0 everywhere, the captured data may be stale — try unchecking seat-safe mode.'
           : 'No clash-free combination exists for the selected courses.';
         return;
       }
 
-      const table = document.createElement('table');
-      table.innerHTML = '<tr><th>#</th><th>Credits</th><th>Slots (course · slot · faculty · venue)</th></tr>';
-      data.suggestions.forEach((s, i) => {
-        const row = document.createElement('tr');
-        const slotsText = s.slots.map(x => `${x.course_code} · ${x.slot_code} · ${x.faculty_name || 'TBA'} · ${x.venue}`).join('<br>');
-        row.innerHTML = `<td>${i + 1}</td><td>${s.total_credits}</td><td>${slotsText}</td>`;
-        table.appendChild(row);
+      suggestions.slice(0, 30).forEach((s, i) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'solution';
+        const gaps = s.details ? s.details.total_gaps : '?';
+        wrapper.innerHTML = `<div class="solution-header"><span><b>#${i + 1}</b></span><span>Credits: <b>${s.total_credits}</b> · Gaps: <b>${gaps}</b></span></div>`;
+        wrapper.appendChild(renderGridTable(s));
+        wrapper.appendChild(renderLegend(s));
+        resultsEl.appendChild(wrapper);
       });
-      resultsEl.appendChild(table);
     } catch (e) {
       summaryEl.textContent = 'Could not reach the backend: ' + e;
     } finally {
