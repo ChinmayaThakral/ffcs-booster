@@ -116,6 +116,7 @@ export default function App() {
         const resp = await fetch(`${backendUrl.replace(/\/$/, '')}/api/capture`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include', // keep the same guest session across sends, so the web app can see this data too
           body: json,
         });
         const body = (await resp.json()) as { summary?: { courses_processed?: number } };
