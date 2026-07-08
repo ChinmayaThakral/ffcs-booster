@@ -42,6 +42,9 @@ export default defineContentScript({
             });
             return 'parse-failed';
           }
+          if (state.excluded[result.course.code]) {
+            return `excluded:${result.course.code}`;
+          }
           state = mergeCapturedCourse(state, result.course);
           await saveSemester(state);
           return `captured:${result.course.code}:${result.course.options.length}`;
