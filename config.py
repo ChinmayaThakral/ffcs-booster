@@ -11,6 +11,15 @@ DEBUG = True
 from datetime import timedelta
 PERMANENT_SESSION_LIFETIME = timedelta(days=7)
 
+# The browser extension posts to this app from a chrome-extension:// origin
+# (cross-site). Browsers only send a cookie back on a cross-site request if
+# it's SameSite=None, which in turn requires Secure. This is honored over
+# plain http on http://localhost/127.0.0.1 specifically, since browsers treat
+# loopback addresses as a secure context; it's also correct for production,
+# which is always served over https.
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+
 # Database configuration
 # Database configuration
 # 1. Prefer External DB (Postgres) if available (e.g. Render/Vercel/Neon)
