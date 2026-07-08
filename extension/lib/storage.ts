@@ -7,12 +7,20 @@
 import { browser } from 'wxt/browser';
 import type { CaptureCourse, CaptureDataset, DiscoveredCourse, ParseIssue } from './schema';
 
+export interface ExcludedCourse {
+  code: string;
+  title: string;
+  excludedAt: string;
+}
+
 export interface SemesterState {
   semesterLabel: string;
   campus: string;
   sourceUrl?: string;
   discovered: Record<string, DiscoveredCourse>;
   captured: Record<string, CaptureCourse>;
+  /** Courses the student opened by mistake and removed — never re-captured until restored. */
+  excluded: Record<string, ExcludedCourse>;
   lastUpdated: string;
 }
 
@@ -30,12 +38,14 @@ export function emptyState(semesterLabel: string): SemesterState {
     campus: 'VIT_BHOPAL',
     discovered: {},
     captured: {},
+    excluded: {},
     lastUpdated: new Date().toISOString(),
   };
 }
 
-/** Pure merge: a freshly parsed course detail replaces that course's options. */
+/** Pure merge: a freshly parsed course detail replaces that course's options. Excluded courses are ignored. */
 export function mergeCapturedCourse(state: SemesterState, course: CaptureCourse): SemesterState {
+  if (state.excluded[course.code]) return state;
   return {
     ...state,
     captured: { ...state.captured, [course.code]: course },
@@ -43,11 +53,41 @@ export function mergeCapturedCourse(state: SemesterState, course: CaptureCourse)
   };
 }
 
-/** Pure merge: discovered courses are added/refreshed, captured data untouched. */
+/** Pure merge: discovered courses are added/refreshed, captured data untouched. Excluded courses are ignored. */
 export function mergeDiscovered(state: SemesterState, courses: DiscoveredCourse[]): SemesterState {
   const discovered = { ...state.discovered };
-  for (const c of courses) discovered[c.code] = c;
+  for (const c of courses) {
+    if (state.excluded[c.code]) continue;
+    discovered[c.code] = c;
+  }
   return { ...state, discovered, lastUpdated: new Date().toISOString() };
+}
+
+/**
+ * Remove a course the student opened by mistake. It disappears from the
+ * checklist immediately and is ignored by future captures/discoveries on the
+ * same course code until restoreCourse() is called.
+ */
+export function excludeCourse(state: SemesterState, code: string): SemesterState {
+  const title = state.captured[code]?.title ?? state.discovered[code]?.title ?? code;
+  const captured = { ...state.captured };
+  const discovered = { ...state.discovered };
+  delete captured[code];
+  delete discovered[code];
+  return {
+    ...state,
+    captured,
+    discovered,
+    excluded: { ...state.excluded, [code]: { code, title, excludedAt: new Date().toISOString() } },
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
+/** Undo an exclusion. The course reappears once its page is opened/re-parsed. */
+export function restoreCourse(state: SemesterState, code: string): SemesterState {
+  const excluded = { ...state.excluded };
+  delete excluded[code];
+  return { ...state, excluded, lastUpdated: new Date().toISOString() };
 }
 
 export type CourseStatus = 'captured' | 'stale' | 'pending';
@@ -68,6 +108,7 @@ export function buildDataset(state: SemesterState): CaptureDataset {
   const codes = new Set([...Object.keys(state.captured), ...Object.keys(state.discovered)]);
 
   for (const code of Array.from(codes).sort()) {
+    if (state.excluded[code]) continue; // defensive: merges already keep excluded courses out
     const captured = state.captured[code];
     const discovered = state.discovered[code];
     if (captured) {
@@ -105,7 +146,10 @@ export function buildDataset(state: SemesterState): CaptureDataset {
 export async function loadSemester(label: string): Promise<SemesterState> {
   const key = semesterKey(label);
   const result = await browser.storage.local.get(key);
-  return (result[key] as SemesterState | undefined) ?? emptyState(label);
+  const stored = result[key] as Partial<SemesterState> | undefined;
+  if (!stored) return emptyState(label);
+  // Back-compat: state saved before `excluded` existed.
+  return { ...emptyState(label), ...stored, excluded: stored.excluded ?? {} };
 }
 
 export async function saveSemester(state: SemesterState): Promise<void> {
